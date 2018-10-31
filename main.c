@@ -5,6 +5,7 @@
 //Technical support:goodtft@163.com
 
 #define ARDUINO 0
+#define DEBUG 1
 
 #if ARDUINO
 
@@ -14,6 +15,7 @@
 
 #include <time.h>
 #include <math.h>
+#include <stdio.h>
 
 #endif
 
@@ -373,6 +375,9 @@ void powerSubsystemTask(void *powerSubsystemData) {
     static unsigned long nextExecutionTime = 0;
     static unsigned long lastExecutionTime = 0;
     if (nextExecutionTime == 0 || systemTime() > nextExecutionTime) {
+#if !ARDUINO && DEBUG
+        printf("powerSubsystemTask\n");
+#endif
         printTaskTiming("powerSubsystemTask", lastExecutionTime);
         lastExecutionTime = systemTime();
         PowerSubsystemData *data = (PowerSubsystemData *) powerSubsystemData;
@@ -448,6 +453,9 @@ void thrusterSubsystemTask(void *thrusterSubsystemData) {
     static unsigned long nextExecutionTime = 0;
     static unsigned long lastExecutionTime = 0;
     if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+#if !ARDUINO && DEBUG
+        printf("thrusterSubsystemTask\n");
+#endif
         printTaskTiming("thrusterSubsystemTask", lastExecutionTime);
         lastExecutionTime = systemTime();
         ThrusterSubsystemData *data = (ThrusterSubsystemData *) thrusterSubsystemData;
@@ -460,16 +468,19 @@ void thrusterSubsystemTask(void *thrusterSubsystemData) {
         unsigned int duration = (signal & (0xFF00)) >> 8;
 
         //Debug print info
-        //printf("\t\tDirection %d\n", direction);
-        //printf("\t\tMagnitude %d\n", magnitude);
-        //printf("\t\tDuration %d\n", duration);
+#if !ARDUINO && DEBUG
+        printf("\t\tDirection %d\n", direction);
+        printf("\t\tMagnitude %d\n", magnitude);
+        printf("\t\tDuration %d\n", duration);
+        printf("thrusterSubsystemTask\n");
+#endif
 
-        //printf("thrusterSubsystemTask\n");
 
         //Adjust fuel level based on command
         if (*data->fuelLevel > 0 && (int) *data->fuelLevel >= ((int) *data->fuelLevel - 4 * duration / 100)) {
             *data->fuelLevel = unsignedShortMax(0, *data->fuelLevel -
-                                      4 * duration / 100); //magnitude at this point is full on and full off
+                                                   4 * duration /
+                                                   100); //magnitude at this point is full on and full off
         } else {
             *data->fuelLevel = 0;
         }
@@ -501,10 +512,13 @@ void satelliteComsTask(void *satelliteComsData) {
     static unsigned long nextExecutionTime = 0;
     static unsigned long lastExecutionTime = 0;
     if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+#if !ARDUINO && DEBUG
+        printf("satelliteComsTask\n");
+#endif
         printTaskTiming("satelliteComsTask", lastExecutionTime);
         lastExecutionTime = systemTime();
         SatelliteComsData *data = (SatelliteComsData *) satelliteComsData;
-        //printf("satelliteComsTask\n");
+
         //TODO: In future labs, send the following data:
         /*
             * Fuel Low
@@ -526,6 +540,9 @@ void consoleDisplayTask(void *consoleDisplayData) {
     static unsigned long nextExecutionTime = 0;
     static unsigned long lastExecutionTime = 0;
     if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+#if !ARDUINO && DEBUG
+        printf("consoleDisplayTask\n");
+#endif
         printTaskTiming("consoleDisplayTask", lastExecutionTime);
         lastExecutionTime = systemTime();
         ConsoleDisplayData *data = (ConsoleDisplayData *) consoleDisplayData;
@@ -548,6 +565,17 @@ void consoleDisplayTask(void *consoleDisplayData) {
             Serial.println(*data->powerConsumption);
             Serial.print("\tPower Generation: ");
             Serial.println(*data->powerGeneration);
+#else
+            printf("\tSolar Panel State: ");
+            printf((*data->solarPanelState ? " ON" : "OFF"));
+            printf("\tBattery Level: ");
+            printf("%d", *data->batteryLevel);
+            printf("\tFuel Level: ");
+            printf("%d", *data->fuelLevel);
+            printf("\tPower Consumption: ");
+            printf("%d", *data->powerConsumption);
+            printf("\tPower Generation: ");
+            printf("%d\n", *data->powerGeneration);
 #endif
 
         } else {
@@ -571,7 +599,6 @@ void consoleDisplayTask(void *consoleDisplayData) {
 //Controls the execution of the warning alarm subsystem
 void warningAlarmTask(void *warningAlarmData) {
     WarningAlarmData *data = (WarningAlarmData *) warningAlarmData;
-    //printf("warningAlarmTask\n");
     static int fuelStatus = NONE;
     static int batteryStatus = NONE;
     static unsigned long hideFuelTime = 0;
@@ -679,6 +706,9 @@ void print(char str[], int length, int color, int line) {
         tft.setCursor(i * 12, line * 16);
         tft.print(str[i]);
     }
+#else
+    printf("%s", str);
+    printf(" color: %d - line: %d\n", color, line);
 #endif
 }
 
