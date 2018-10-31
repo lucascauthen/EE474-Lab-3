@@ -6,10 +6,14 @@
 
 #IncludeRegexTransform: 
 
-/Users/admin/Google Drive/School/EE/EE 474/Lab2/EE474-Lab-2/main.c
-stdlib.h
+/Users/admin/Documents/GitHub/EE474-Lab-3/main.c
+Elegoo_GFX.h
 -
-stdio.h
+Elegoo_TFTLCD.h
+-
+time.h
+-
+math.h
 -
 limits.h
 -

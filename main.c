@@ -4,9 +4,21 @@
 // SEE RELEVANT COMMENTS IN Elegoo_TFTLCD.h FOR SETUP.
 //Technical support:goodtft@163.com
 
+#define ARDUINO 0
+
+#if ARDUINO
+
 #include <Elegoo_GFX.h>    // Core graphics library
 #include <Elegoo_TFTLCD.h> // Hardware-specific library
+#else
+
+#include <time.h>
+#include <math.h>
+
+#endif
+
 #include <limits.h> // Used for random number generation
+#include <time.h>
 
 // The control pins for the LCD can be assigned to any digital or
 // analog pins...but we'll use the analog pins as this allows us to
@@ -42,7 +54,11 @@
 #define WHITE   0xFFFF
 #define ORANGE  0xFC00
 
+#if ARDUINO
+
 Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+
+#endif
 // If using the shield, all control and data lines are fixed, and
 // a simpler declaration can optionally be used:
 // Elegoo_TFTLCD tft;
@@ -164,13 +180,30 @@ void printTaskTiming(char taskName[], unsigned long lastRunTime);
 //Returns the current system time in milliseconds
 unsigned long systemTime();
 
+unsigned short unsignedShortMax(long a, long b) {
+#if !ARDUINO
+    return (unsigned short) fmax(a, b);
+#else
+    return max(a,b)
+#endif
+}
+
+unsigned short unsignedShortMin(long a, long b) {
+#if !ARDUINO
+    return (unsigned short) fmin(a, b);
+#else
+    return min(a,b)
+#endif
+}
+
+#if ARDUINO
 
 //Arduino setup function
 void setup(void) {
     Serial.begin(9600); //Sets baud rate to 9600
     Serial.println(F("TFT LCD test")); //Prints to serial monitor
 
-//determines if shield or board
+    //determines if shield or board
 #ifdef USE_Elegoo_SHIELD_PINOUT
     Serial.println(F("Using Elegoo 2.4\" TFT Arduino Shield Pinout"));
 #else
@@ -226,6 +259,13 @@ void setup(void) {
 void loop(void) {
     setupSystem();
 }
+#else
+
+int main() {
+    setupSystem();
+}
+
+#endif
 
 //Starts up the system by creating all the objects that are needed to run the system
 void setupSystem() {
@@ -388,7 +428,7 @@ void powerSubsystemTask(void *powerSubsystemData) {
             if (result < 0) {
                 *data->batteryLevel = 0;
             } else {
-                *data->batteryLevel = min((unsigned short) result, 100);
+                *data->batteryLevel = unsignedShortMin((unsigned short) result, 100);
             }
         } else { //If not deplyed
             int result = *data->batteryLevel - 3 * (*(data->powerConsumption));
@@ -428,7 +468,7 @@ void thrusterSubsystemTask(void *thrusterSubsystemData) {
 
         //Adjust fuel level based on command
         if (*data->fuelLevel > 0 && (int) *data->fuelLevel >= ((int) *data->fuelLevel - 4 * duration / 100)) {
-            *data->fuelLevel = max(0, *data->fuelLevel -
+            *data->fuelLevel = unsignedShortMax(0, *data->fuelLevel -
                                       4 * duration / 100); //magnitude at this point is full on and full off
         } else {
             *data->fuelLevel = 0;
@@ -497,6 +537,7 @@ void consoleDisplayTask(void *consoleDisplayData) {
             //Battery Level
             //Fuel Level
             //Power Consumption
+#if ARDUINO
             Serial.print("\tSolar Panel State: ");
             Serial.println((*data->solarPanelState ? " ON" : "OFF"));
             Serial.print("\tBattery Level: ");
@@ -507,8 +548,10 @@ void consoleDisplayTask(void *consoleDisplayData) {
             Serial.println(*data->powerConsumption);
             Serial.print("\tPower Generation: ");
             Serial.println(*data->powerGeneration);
+#endif
 
         } else {
+#if ARDUINO
             if (*data->fuelLow == TRUE) {
                 Serial.println("Fuel Low!");
             }
@@ -516,7 +559,11 @@ void consoleDisplayTask(void *consoleDisplayData) {
                 Serial.println("Battery Low!");
             }
         }
+
         Serial.println();
+#else
+        }
+#endif
         nextExecutionTime = systemTime() + runDelay;
     }
 }
@@ -626,15 +673,18 @@ int randomInteger(int low, int high) {
 //Prints a string to the tft given text, the length of the text, a color, and a line number
 void print(char str[], int length, int color, int line) {
     //To flash the selected line, you must print exact same string black then recolor
+#if ARDUINO
     for (int i = 0; i < length; i++) {
         tft.setTextColor(color);
         tft.setCursor(i * 12, line * 16);
         tft.print(str[i]);
     }
+#endif
 }
 
 //Starts up the system by creating all the objects that are needed to run the system
 void printTaskTiming(char taskName[], unsigned long lastRunTime) {
+#if ARDUINO
     if (shouldPrintTaskTiming) {
         Serial.print(taskName);
         Serial.print(" - cycle delay: ");
@@ -644,9 +694,14 @@ void printTaskTiming(char taskName[], unsigned long lastRunTime) {
             Serial.println(0.0, 4);
         }
     }
+#endif
 }
 
 //Returns the current system time in milliseconds
 unsigned long systemTime() {
+#if ARDUINO
     return millis();
+#else
+    return (unsigned long) time(NULL) * 1000;
+#endif
 }
