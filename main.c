@@ -79,13 +79,19 @@ Bool shouldPrintTaskTiming = TRUE;
 unsigned int ThrusterControl = 0;
 
 //Power Management
-unsigned short BatteryLevel = 100;
+unsigned int* BatteryLevelPtr;
+unsigned short BatteryLevel = 100; //TODO Remove
 unsigned short FuelLevel = 100;
 unsigned short PowerConsumption = 0;
 unsigned short PowerGeneration = 0;
 
 //Solar Panel Control
 Bool SolarPanelState = FALSE;
+Bool SolarPanelDeploy = FALSE;
+Bool SolarPanelRetract = FALSE;
+Bool DriveMotorSpeedInc = FALSE;
+Bool DriveMotorSpeedDec = FALSE;
+unsigned short MotorDrive = 0;
 
 //Status Management and Annunciation
 //Same as Power Management
@@ -93,6 +99,14 @@ Bool SolarPanelState = FALSE;
 //Warning Alarm
 Bool FuelLow = FALSE;
 Bool BatteryLow = FALSE;
+
+//Mining vehicle communications
+char Command = NULL;
+char Response = NULL;
+
+
+
+
 
 struct TaskStruct {
     void (*task)(void *);
@@ -105,11 +119,28 @@ typedef struct TaskStruct TCB;
 
 struct PowerSubsystemDataStruct {
     Bool *solarPanelState;
+    Bool *solarPanelDeploy;
+    Bool *solarPanelRetract;
     unsigned short *batteryLevel;
     unsigned short *powerConsumption;
     unsigned short *powerGeneration;
 };
 typedef struct PowerSubsystemDataStruct PowerSubsystemData;
+
+struct SolarPanelControlDataStruct {
+    Bool *solarPanelState;
+    Bool *solarPanelDeploy;
+    Bool *solarPanelRetract;
+    Bool *driveMotorSpeedInc;
+    Bool *driveMotorSpeedDec;
+};
+typedef struct SolarPanelControlDataStruct SolarPanelControlData;
+
+struct ConsoleKeypadDataStruct {
+    Bool *driveMotorSpeedInc;
+    Bool *driveMotorSpeedDec;
+};
+typedef struct ConsoleKeypadDataStruct ConsoleKeypadData;
 
 struct ThrusterSubsystemDataStruct {
     unsigned int *thrusterControl;
@@ -128,6 +159,12 @@ struct SatelliteComsDataStruct {
     unsigned int *thrusterControl;
 };
 typedef struct SatelliteComsDataStruct SatelliteComsData;
+
+struct VehicleCommsDataStruct {
+    char *command;
+    char *responce;
+};
+typedef struct VehicleCommsDataStruct VehicleCommsData;
 
 struct ConsoleDisplayDataStruct {
     Bool *fuelLow;
