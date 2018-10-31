@@ -201,6 +201,12 @@ void consoleDisplayTask(void *consoleDisplayData);
 //Controls the execution of the warning alarm subsystem
 void warningAlarmTask(void *warningAlarmData);
 
+//Controls the execution of the Keypad task
+void consoleKeypadTask(void *consoleKeypadData);
+
+//Controls the execution of the VehicleComms task
+void vehicleCommsTask(void *vehicleCommsData);
+
 //Returns a random integer between low and high inclusively
 int randomInteger(int low, int high);
 
@@ -704,6 +710,17 @@ void warningAlarmTask(void *warningAlarmData) {
         print("BATTERY", 7, GREEN, 1);
         batteryStatus = GREEN;
     }
+}
+
+//Controls the execution of the Keypad task
+void consoleKeypadTask(void *consoleKeypadData) {
+    ConsoleKeypadData *data = (ConsoleKeypadData *) consoleKeypadData;
+}
+
+//Controls the execution of the VehicleComms task
+void vehicleCommsTask(void *vehicleCommsData) {
+    VehicleCommsData *data = (VehicleCommsData *) vehicleCommsData;
+
 }
 
 //Returns a random integer between low and high inclusively
