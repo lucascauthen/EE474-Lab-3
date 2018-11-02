@@ -370,6 +370,21 @@ void setupSystem() {
      * Init the various tasks
      */
 
+    TCB solarPanelSubsystem;
+    SolarPanelControlData solarPanelControlData;
+
+    solarPanelControlData.solarPanelState = &SolarPanelState;
+    solarPanelControlData.solarPanelDeploy = &SolarPanelDeploy;
+    solarPanelControlData.solarPanelRetract = &SolarPanelRetract;
+    solarPanelControlData.driveMotorSpeedInc = &DriveMotorSpeedInc;
+    solarPanelControlData.driveMotorSpeedDec = &DriveMotorSpeedDec;
+
+    solarPanelSubsystem.taskDataPtr = (void *)&solarPanelControlData;
+    solarPanelSubsystem.task = &solarPanelSubsystemTask;
+
+    insertNode(&solarPanelSubsystem);
+
+
     //Power Subsystem
     TCB powerSubsystem;
     PowerSubsystemData powerSubsystemData;
