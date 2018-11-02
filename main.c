@@ -84,6 +84,14 @@ unsigned short PowerGeneration = 0;
 
 //Solar Panel Control
 Bool SolarPanelState = FALSE;
+Bool SolarPanelDeploy = FALSE;
+Bool SolarPanelRetract = FALSE;
+Bool DriveMotorSpeedInc = FALSE;
+Bool DriveMotorSpeedDec = FALSE;
+
+//Vehicle comms Data
+char Command = NULL;
+char Response = NULL;
 
 //Status Management and Annunciation
 //Same as Power Management
@@ -105,14 +113,46 @@ typedef struct TaskStruct TCB;
 
 TCB *head = NULL;
 TCB *tail = NULL;
+TCB powerSubsystem;
+TCB thrusterSubsystem;
+TCB satelliteComs;
+TCB consoleDisplay;
+TCB warningAlarm;
+TCB solarPanelControl;
+TCB consoleKeypad;
+TCB vehicalComs;
+
 
 struct PowerSubsystemDataStruct {
     Bool *solarPanelState;
+	Bool *solarPanelDeploy;
+	Bool *solarPanelRetract;
     unsigned short *batteryLevel;
     unsigned short *powerConsumption;
     unsigned short *powerGeneration;
 };
 typedef struct PowerSubsystemDataStruct PowerSubsystemData;
+
+struct SolarPanelControlDataStruct {
+	Bool *solarPanelState;
+	Bool *solarPanelDeploy;
+	Bool *solarPanelRetract;
+	Bool *driveMotorSpeedInc;
+	Bool *driveMotorSpeedDec;
+};
+typedef struct SolarPanelControlDataStruct SolarPanelControlData;
+
+struct ConsoleKeypadDataStruct {
+	Bool *driveMotorSpeedInc;
+	Bool *driveMotorSpeedDec;
+};
+typedef struct ConsoleKeypadDataStruct ConsoleKeypadData;
+
+struct VehicleComsDataStruct {
+	char *command;
+	char *response;
+};
+typedef struct VehicleComsDataStruct VehicleComsData;
 
 struct ThrusterSubsystemDataStruct {
     unsigned int *thrusterControl;
@@ -154,6 +194,15 @@ typedef struct WarningAlarmDataStruct WarningAlarmData;
 
 //Controls the execution of the power subsystem
 void powerSubsystemTask(void *powerSubsystemData);
+
+//Controls the execution of the solar panels
+void solarPanelControlTask(void *solarPanelControlData);
+
+//Controls the execution of the manuel control of solar panels
+void consoleKeypadTask(void *consoleKeypadData);
+
+//Controls the execution of the vehicle subsystem
+void vehicleComsTask(void *vehicleComsData);
 
 //Controls the execution of the thruster subsystem
 void thrusterSubsystemTask(void *thrusterSubsystemData);
@@ -314,7 +363,6 @@ void setupSystem() {
      */
 
     //Power Subsystem
-    TCB powerSubsystem;
     PowerSubsystemData powerSubsystemData;
     powerSubsystemData.solarPanelState = &SolarPanelState;
     powerSubsystemData.batteryLevel = &BatteryLevel;
@@ -327,9 +375,43 @@ void setupSystem() {
 	powerSubsystem.prev = NULL;
 
     insert(&powerSubsystem);
+	
+	//Solar Subsystem
+	SolarPanelControlData solarPanelControlData;
+	solarPanelControlData.solarPanelState = &SolarPanelState;
+	solarPanelControlData.solarPanelDeploy = &SolarPanelDeploy;
+	solarPanelControlData.solarPanelRetract = &SolarPanelRetract;
+	solarPanelControlData.driveMotorSpeedInc = &DriveMotorSpeedInc;
+	solarPanelControlData.driveMotorSpeedDec = &DriveMotorSpeedDec;
+	
+	solarPanelControl.taskDataPtr = (void *) &solarPanelControlData;
+	solarPanelControl.task = &solarPanelControlTask;
+	solarPanelControl.next = NULL;
+	solarPanelControl.prev = NULL;
+	
+	//consoleKeypad Subsystem
+	ConsoleKeypadData consoleKeypadData;
+	consoleKeypadData.driveMotorSpeedInc = &DriveMotorSpeedInc;
+	consoleKeypadData.driveMotorSpeedDec = &DriveMotorSpeedDec;
+	
+	consoleKeypad.taskDataPtr = (void *) &consoleKeypadData;
+	consoleKeypad.task = &consoleKeypadTask;
+	consoleKeypad.next = NULL;
+	consoleKeypad.prev = NULL;
+	
+	//vehicalComs Subsystem
+	VehicleComsData vehicleComsData;
+	vehicleComsData.command = &Command;
+	vehicleComsData.response = &Response;
+	
+	vehicalComs.taskDataPtr = (void *) &vehicleComsData;
+	vehicalComs.task = &vehicleComsTask;
+	vehicalComs.next = NULL;
+	vehicalComs.prev = NULL;
+	
+	insert(&vehicalComs);
 
     //Thruster Subsystem
-    TCB thrusterSubsystem;
     ThrusterSubsystemData thrusterSubsystemData;
     thrusterSubsystemData.fuelLevel = &FuelLevel;
     thrusterSubsystemData.thrusterControl = &ThrusterControl;
@@ -342,7 +424,6 @@ void setupSystem() {
     insert(&thrusterSubsystem);
 
     //Satellite Comms
-    TCB satelliteComs;
     SatelliteComsData satelliteComsData;
     satelliteComsData.thrusterControl = &ThrusterControl;
     satelliteComsData.fuelLevel = &FuelLevel;
@@ -361,7 +442,6 @@ void setupSystem() {
     insert(&satelliteComs);
 
     //Console Display
-    TCB consoleDisplay;
     ConsoleDisplayData consoleDisplayData;
     consoleDisplayData.fuelLow = &FuelLow;
     consoleDisplayData.batteryLow = &BatteryLow;
@@ -379,7 +459,6 @@ void setupSystem() {
     insert(&consoleDisplay);
 
     //Warning Alarm
-    TCB warningAlarm;
     WarningAlarmData warningAlarmData;
     warningAlarmData.batteryLevel = &BatteryLevel;
     warningAlarmData.batteryLow = &BatteryLow;
@@ -484,6 +563,18 @@ void powerSubsystemTask(void *powerSubsystemData) {
         nextExecutionTime = systemTime() + runDelay;
         executionCount++;
     }
+}
+
+//Controls the execution of the solar panels
+void solarPanelControlTask(void *solarPanelControlData){
+}
+
+//Controls the execution of the manuel control of solar panels
+void consoleKeypadTask(void *consoleKeypadData){
+}
+
+//Controls the execution of the vehicle subsystem
+void vehicleComsTask(void *vehicleComsData){
 }
 
 //Controls the execution of the thruster subsystem
