@@ -285,6 +285,7 @@ unsigned short unsignedShortMin(long a, long b) {
 //Arduino setup function
 void setup(void) {
     Serial.begin(9600); //Sets baud rate to 9600
+    Serial1.begin(9600); //Sets baud rate to 9600
     Serial.println(F("TFT LCD test")); //Prints to serial monitor
 
     //determines if shield or board
@@ -336,21 +337,12 @@ void setup(void) {
     }
     tft.begin(identifier);
     tft.fillScreen(NONE);
-    setupSystem();
+
 }
 
 //Arduino loop
-TCB *cur = head;
 void loop(void) {
-    if (NULL != head) {
-        cur->task(cur->taskDataPtr);
-        TCB *next = cur->prev->next;
-        if (next != cur) {
-            cur = next; //This happens when a task removes itself from the list
-        } else {
-            cur = cur->next; //This happens with the natural progression of the queue
-        }
-    }
+    setupSystem();
 }
 #else
 
@@ -503,9 +495,7 @@ void setupSystem() {
 
 
     //Starts the schedule looping
-#if !ARDUINO_ON
     scheduleTask();
-#endif
 }
 
 //Runs the loop of all six tasks, does not run the task if the task pointer is null
@@ -569,9 +559,11 @@ void powerSubsystemTask(void *powerSubsystemData) {
         //powerGeneration
         if (*data->solarPanelState) {
             if (*data->batteryLevel > 34) {
+                if(*data->solarPanelRetract) {  //If we have not already signalled to retract
+                    insertNode(&solarPanelControlTCB); //Start the task
+                }
                 *data->solarPanelDeploy = FALSE;
                 *data->solarPanelRetract = TRUE;
-                insertNode(&solarPanelControlTCB);
                 *data->powerGeneration = 0;
             } else if (*data->batteryLevel < 18) {
                 //Increment the variable by 2 every even numbered time
@@ -588,9 +580,11 @@ void powerSubsystemTask(void *powerSubsystemData) {
             }
         } else {
             if (*data->batteryLevel <= 4) {
+                if(!*data->solarPanelDeploy) { //If we have not already signalled to deploy
+                    insertNode(&solarPanelControlTCB); //Add the task
+                }
                 *data->solarPanelDeploy = TRUE;
                 *data->solarPanelRetract = FALSE;
-                insertNode(&solarPanelControlTCB);
             }
         }
 
@@ -912,6 +906,7 @@ void solarPanelControlTask(void *solarPanelControlData) {
                 elapsedTime += systemTime() - lastRunTime;
             }
         }
+        lastRunTime = systemTime();
         if (systemTime() >= nextPWMTime) {
             isPWMOn = !isPWMOn;
             nextPWMTime = systemTime() + PWMPeriod / 2;
@@ -934,14 +929,13 @@ void solarPanelControlTask(void *solarPanelControlData) {
 #if ARDUINO_ON
     //TODO assign pin to ouput pwmOutput
 #endif
-    lastRunTime = systemTime();
 }
 
 //Controls the execution of the Keypad task
 void consoleKeypadTask(void *consoleKeypadData) {
     ConsoleKeypadData *data = (ConsoleKeypadData *) consoleKeypadData;
 #if ARDUINO_ON
-    if(Serial.available() > 0) {
+    if(Serial1.available() > 0) {
         Serial.println("YES!!!");
         char signal = Serial.read();
         if(INC_CHAR == signal) {
@@ -955,6 +949,8 @@ void consoleKeypadTask(void *consoleKeypadData) {
             *data->driveMotorSpeedDec = FALSE;
         }
     }
+    *data->driveMotorSpeedInc = TRUE;
+    *data->driveMotorSpeedDec = TRUE;
 #else
     *data->driveMotorSpeedInc = TRUE;
     *data->driveMotorSpeedDec = TRUE;
