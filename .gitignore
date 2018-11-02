@@ -3,3 +3,4 @@ cmake-build-debug/Lab2
 *.o
 *.includecache
 *.xml
+.idea/workspace.xml
