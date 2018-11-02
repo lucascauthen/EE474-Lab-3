@@ -70,7 +70,7 @@ enum myBool {
 };
 typedef enum myBool Bool;
 
-long runDelay = 5000;
+long runDelay = 5000000;
 long randomGenerationSeed = 1000;
 Bool shouldPrintTaskTiming = TRUE;
 
@@ -80,10 +80,14 @@ unsigned int ThrusterControl = 0;
 
 //Power Management
 unsigned int *BatteryLevelPtr;
-unsigned short BatteryLevel = 100; //TODO Remove
+unsigned short BatteryLevel = 0;
 unsigned short FuelLevel = 100;
 unsigned short PowerConsumption = 0;
 unsigned short PowerGeneration = 0;
+unsigned short BatteryPin = A15; //Analog Pin A15 on ATMEGA 2560
+unsigned short BatteryLevelArray[16];
+
+unsigned short BatteryDelay = 600;
 
 //Solar Panel Control
 Bool SolarPanelState = FALSE;
@@ -99,6 +103,9 @@ unsigned short MotorDrive = 0;
 //Warning Alarm
 Bool FuelLow = FALSE;
 Bool BatteryLow = FALSE;
+
+short LongTimeDelay = 2000000;
+short ShortTimeDelay = 1000000;
 
 //Mining vehicle communications
 char Command = NULL;
@@ -125,6 +132,7 @@ struct PowerSubsystemDataStruct {
     unsigned short *batteryLevel;
     unsigned short *powerConsumption;
     unsigned short *powerGeneration;
+    unsigned short batteryLevelArrayIndex;
 };
 typedef struct PowerSubsystemDataStruct PowerSubsystemData;
 
@@ -187,8 +195,12 @@ struct WarningAlarmDataStruct {
 typedef struct WarningAlarmDataStruct WarningAlarmData;
 
 
+//Controls the exeuction of the solar panel constrol subsystem
+void solarPanelSubsystemTask(void *solarPanelSubsystemData);
+
 //Controls the execution of the power subsystem
 void powerSubsystemTask(void *powerSubsystemData);
+void batteryRead(PowerSubsystemData *data);
 
 //Controls the execution of the thruster subsystem
 void thrusterSubsystemTask(void *thrusterSubsystemData);
@@ -457,15 +469,20 @@ void scheduleTask() {
 void powerSubsystemTask(void *powerSubsystemData) {
     //Count of the number times this function is called.
     // It is okay if this number wraps to 0 because we just care about if the function call is odd or even
+    PowerSubsystemData *data = (PowerSubsystemData *)powerSubsystemData;
     static unsigned long nextExecutionTime = 0;
     static unsigned long lastExecutionTime = 0;
-    if (nextExecutionTime == 0 || systemTime() > nextExecutionTime) {
+    static unsigned long readBetteryLevelExecuationTime = 0;
+    if (0 == nextExecutionTime) {
+        readBetteryLevelExecuationTime = systemTime() + BatteryDelay;
+    }
+    static Bool batteryInitialRead = TRUE;
+    if (0 == nextExecutionTime || systemTime() > nextExecutionTime) {
 #if !ARDUINO && DEBUG
         printf("powerSubsystemTask\n");
 #endif
         printTaskTiming("powerSubsystemTask", lastExecutionTime);
         lastExecutionTime = systemTime();
-        PowerSubsystemData *data = (PowerSubsystemData *) powerSubsystemData;
         static unsigned int executionCount = 0;
         //powerConsumption
         static Bool consumptionIncreasing = TRUE;
@@ -491,10 +508,10 @@ void powerSubsystemTask(void *powerSubsystemData) {
 
         //powerGeneration
         if (*data->solarPanelState) {
-            if (*data->batteryLevel > 95) {
+            if (*data->batteryLevel > 34) {
                 *data->solarPanelState = FALSE;
                 *data->powerGeneration = 0;
-            } else if (*data->batteryLevel < 50) {
+            } else if (*data->batteryLevel < 18) {
                 //Increment the variable by 2 every even numbered time
                 if (executionCount % 2 == 0) {
                     (*data->powerGeneration) += 2;
@@ -508,29 +525,58 @@ void powerSubsystemTask(void *powerSubsystemData) {
                 }
             }
         } else {
-            if (*data->batteryLevel <= 10) {
+            if (*data->batteryLevel <= 4) {
                 *data->solarPanelState = TRUE;
             }
         }
+
+        //Waits 600us before updating new level to ensure a valid reading
+        //Converts analogRead from 50 to 332 for a 1.5V Battery to represent 0 to 36V
+        //50 is an offset of the values, and 0.12766 is the conversion from 282 values to 36V
+
+        //Can easily be changed to take measurements every 600 us by adding another boolean
+        if (!batteryInitialRead) {
+            batteryRead(data);
+        }
+
+
+        /* DEPRECATED
         //batteryLevel
         if (*data->solarPanelState) { //If deployed
             short result = *data->batteryLevel - (*(data->powerConsumption)) + (*(data->powerGeneration));
             if (result < 0) {
                 *data->batteryLevel = 0;
             } else {
-                *data->batteryLevel = unsignedShortMin((unsigned short) result, 100);
+                *data->batteryLevel = unsignedShortMin((unsigned short)result, 100);
             }
         } else { //If not deplyed
             int result = *data->batteryLevel - 3 * (*(data->powerConsumption));
             if (result < 0) {
                 *data->batteryLevel = 0;
             } else {
-                *data->batteryLevel = (unsigned short) result;
+                *data->batteryLevel = (unsigned short)result;
             }
         }
+        */
+
+
         nextExecutionTime = systemTime() + runDelay;
         executionCount++;
     }
+    if (batteryInitialRead && systemTime() >= readBetteryLevelExecuationTime) {
+        batteryRead(data);
+    }
+}
+
+void batteryRead(PowerSubsystemData * data) {
+    short newVal = ((analogRead(BatteryPin) - 50)*0.12766 - (*(data->powerConsumption)) + (*(data->powerGeneration)));
+    if (newVal < 0) {
+        newVal = 0;
+    } else if (newVal > 36) {
+        newVal = 36;
+    }
+    BatteryLevelArray[data->batteryLevelArrayIndex] = newVal;
+    data->batteryLevelArrayIndex = (data->batteryLevelArrayIndex + 1) % 16;
 }
 
 //Controls the execution of the thruster subsystem
@@ -812,22 +858,22 @@ void print(char str[], int length, int color, int line) {
 void printTaskTiming(char taskName[], unsigned long lastRunTime) {
 #if ARDUINO
     if (shouldPrintTaskTiming) {
-        Serial.print(taskName);
-        Serial.print(" - cycle delay: ");
-        if (lastRunTime > 0) {
-            Serial.println((double) (systemTime() - lastRunTime) / 1000.0, 4);
-        } else {
-            Serial.println(0.0, 4);
-        }
-    }
+		Serial.print(taskName);
+		Serial.print(" - cycle delay: ");
+		if (lastRunTime > 0) {
+			Serial.println((double)(systemTime() - lastRunTime) / 1000000.0, 4);
+		} else {
+			Serial.println(0.0, 4);
+		}
+	}
 #endif
 }
 
 //Returns the current system time in milliseconds
 unsigned long systemTime() {
 #if ARDUINO
-    return millis();
+    return micros();
 #else
-    return (unsigned long) time(NULL) * 1000;
+    return (unsigned long)time(NULL) * 1000000;
 #endif
 }
