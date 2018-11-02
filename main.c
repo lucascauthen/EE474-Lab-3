@@ -1,4 +1,3 @@
-
 // IMPORTANT: ELEGOO_TFTLCD LIBRARY MUST BE SPECIFICALLY
 // CONFIGURED FOR EITHER THE TFT SHIELD OR THE BREAKOUT BOARD.
 // SEE RELEVANT COMMENTS IN Elegoo_TFTLCD.h FOR SETUP.
@@ -66,11 +65,11 @@ Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 // Elegoo_TFTLCD tft;
 
 enum myBool {
-    FALSE = 0, TRUE = 1
+	FALSE = 0, TRUE = 1
 };
 typedef enum myBool Bool;
 
-long runDelay = 5000;
+long runDelay = 5000000;
 long randomGenerationSeed = 1000;
 Bool shouldPrintTaskTiming = TRUE;
 
@@ -80,10 +79,15 @@ unsigned int ThrusterControl = 0;
 
 //Power Management
 unsigned int* BatteryLevelPtr;
-unsigned short BatteryLevel = 100; //TODO Remove
+unsigned short BatteryLevel = 0; //TODO Remove
 unsigned short FuelLevel = 100;
 unsigned short PowerConsumption = 0;
 unsigned short PowerGeneration = 0;
+unsigned short BatteryPin = A15; //Analog Pin A15 on ATMEGA 2560
+unsigned short BatteryLevelArray[16];
+
+unsigned short BatteryDelay = 600;
+
 
 //Solar Panel Control
 Bool SolarPanelState = FALSE;
@@ -100,6 +104,9 @@ unsigned short MotorDrive = 0;
 Bool FuelLow = FALSE;
 Bool BatteryLow = FALSE;
 
+short LongTimeDelay = 2000000;
+short ShortTimeDelay = 1000000;
+
 //Mining vehicle communications
 char Command = NULL;
 char Response = NULL;
@@ -109,85 +116,91 @@ char Response = NULL;
 
 
 struct TaskStruct {
-    void (*task)(void *);
+	void(*task)(void *);
 
-    void *taskDataPtr;
+	void *taskDataPtr;
 };
 
 typedef struct TaskStruct TCB;
 
 
 struct PowerSubsystemDataStruct {
-    Bool *solarPanelState;
-    Bool *solarPanelDeploy;
-    Bool *solarPanelRetract;
-    unsigned short *batteryLevel;
-    unsigned short *powerConsumption;
-    unsigned short *powerGeneration;
+	Bool *solarPanelState;
+	Bool *solarPanelDeploy;
+	Bool *solarPanelRetract;
+	unsigned short *batteryLevel;
+	unsigned short *powerConsumption;
+	unsigned short *powerGeneration;
+	unsigned short batteryLevelArrayIndex;
 };
 typedef struct PowerSubsystemDataStruct PowerSubsystemData;
 
 struct SolarPanelControlDataStruct {
-    Bool *solarPanelState;
-    Bool *solarPanelDeploy;
-    Bool *solarPanelRetract;
-    Bool *driveMotorSpeedInc;
-    Bool *driveMotorSpeedDec;
+	Bool *solarPanelState;
+	Bool *solarPanelDeploy;
+	Bool *solarPanelRetract;
+	Bool *driveMotorSpeedInc;
+	Bool *driveMotorSpeedDec;
 };
 typedef struct SolarPanelControlDataStruct SolarPanelControlData;
 
 struct ConsoleKeypadDataStruct {
-    Bool *driveMotorSpeedInc;
-    Bool *driveMotorSpeedDec;
+	Bool *driveMotorSpeedInc;
+	Bool *driveMotorSpeedDec;
 };
 typedef struct ConsoleKeypadDataStruct ConsoleKeypadData;
 
 struct ThrusterSubsystemDataStruct {
-    unsigned int *thrusterControl;
-    unsigned short *fuelLevel;
+	unsigned int *thrusterControl;
+	unsigned short *fuelLevel;
 };
 typedef struct ThrusterSubsystemDataStruct ThrusterSubsystemData;
 
 struct SatelliteComsDataStruct {
-    Bool *fuelLow;
-    Bool *batteryLow;
-    Bool *solarPanelState;
-    unsigned short *batteryLevel;
-    unsigned short *fuelLevel;
-    unsigned short *powerConsumption;
-    unsigned short *powerGeneration;
-    unsigned int *thrusterControl;
+	Bool *fuelLow;
+	Bool *batteryLow;
+	Bool *solarPanelState;
+	unsigned short *batteryLevel;
+	unsigned short *fuelLevel;
+	unsigned short *powerConsumption;
+	unsigned short *powerGeneration;
+	unsigned int *thrusterControl;
 };
 typedef struct SatelliteComsDataStruct SatelliteComsData;
 
 struct VehicleCommsDataStruct {
-    char *command;
-    char *responce;
+	char *command;
+	char *responce;
 };
 typedef struct VehicleCommsDataStruct VehicleCommsData;
 
 struct ConsoleDisplayDataStruct {
-    Bool *fuelLow;
-    Bool *batteryLow;
-    Bool *solarPanelState;
-    unsigned short *batteryLevel;
-    unsigned short *fuelLevel;
-    unsigned short *powerConsumption;
-    unsigned short *powerGeneration;
+	Bool *fuelLow;
+	Bool *batteryLow;
+	Bool *solarPanelState;
+	unsigned short *batteryLevel;
+	unsigned short *fuelLevel;
+	unsigned short *powerConsumption;
+	unsigned short *powerGeneration;
 };
 typedef struct ConsoleDisplayDataStruct ConsoleDisplayData;
 
 struct WarningAlarmDataStruct {
-    Bool *fuelLow;
-    Bool *batteryLow;
-    unsigned short *batteryLevel;
-    unsigned short *fuelLevel;
+	Bool *fuelLow;
+	Bool *batteryLow;
+	unsigned short *batteryLevel;
+	unsigned short *fuelLevel;
 };
 typedef struct WarningAlarmDataStruct WarningAlarmData;
 
 
+
+//Controls the exeuction of the solar panel constrol subsystem
+void solarPanelSubsystemTask(void *solarPanelSubsystemData);
+
 //Controls the execution of the power subsystem
 void powerSubsystemTask(void *powerSubsystemData);
+void batteryRead(PowerSubsystemData *data);
 
 //Controls the execution of the thruster subsystem
 void thrusterSubsystemTask(void *thrusterSubsystemData);
@@ -227,17 +240,17 @@ unsigned long systemTime();
 
 unsigned short unsignedShortMax(long a, long b) {
 #if !ARDUINO
-    return (unsigned short) fmax(a, b);
+	return (unsigned short)fmax(a, b);
 #else
-    return max(a,b)
+	return max(a, b)
 #endif
 }
 
 unsigned short unsignedShortMin(long a, long b) {
 #if !ARDUINO
-    return (unsigned short) fmin(a, b);
+	return (unsigned short)fmin(a, b);
 #else
-    return min(a,b)
+	return min(a, b)
 #endif
 }
 
@@ -245,547 +258,597 @@ unsigned short unsignedShortMin(long a, long b) {
 
 //Arduino setup function
 void setup(void) {
-    Serial.begin(9600); //Sets baud rate to 9600
-    Serial.println(F("TFT LCD test")); //Prints to serial monitor
+	Serial.begin(9600); //Sets baud rate to 9600
+	Serial.println(F("TFT LCD test")); //Prints to serial monitor
 
-    //determines if shield or board
+									   //determines if shield or board
 #ifdef USE_Elegoo_SHIELD_PINOUT
-    Serial.println(F("Using Elegoo 2.4\" TFT Arduino Shield Pinout"));
+	Serial.println(F("Using Elegoo 2.4\" TFT Arduino Shield Pinout"));
 #else
-    Serial.println(F("Using Elegoo 2.4\" TFT Breakout Board Pinout"));
+	Serial.println(F("Using Elegoo 2.4\" TFT Breakout Board Pinout"));
 #endif
 
-    //prints out tft size
-    Serial.print("TFT size is ");
-    Serial.print(tft.width());
-    Serial.print("x");
-    Serial.println(tft.height());
+	//prints out tft size
+	Serial.print("TFT size is ");
+	Serial.print(tft.width());
+	Serial.print("x");
+	Serial.println(tft.height());
 
-    tft.reset();
-    tft.setTextSize(2);
-    //prints out the current LCD driver version
-    uint16_t identifier = tft.readID();
-    if (identifier == 0x9325) {
-        Serial.println(F("Found ILI9325 LCD driver"));
-    } else if (identifier == 0x9328) {
-        Serial.println(F("Found ILI9328 LCD driver"));
-    } else if (identifier == 0x4535) {
-        Serial.println(F("Found LGDP4535 LCD driver"));
-    } else if (identifier == 0x7575) {
-        Serial.println(F("Found HX8347G LCD driver"));
-    } else if (identifier == 0x9341) {
-        Serial.println(F("Found ILI9341 LCD driver"));
-    } else if (identifier == 0x8357) {
-        Serial.println(F("Found HX8357D LCD driver"));
-    } else if (identifier == 0x0101) {
-        identifier = 0x9341;
-        Serial.println(F("Found 0x9341 LCD driver"));
-    } else if (identifier == 0x1111) {
-        identifier = 0x9328;
-        Serial.println(F("Found 0x9328 LCD driver"));
-    } else { //prints to serial monitor if wiring is bad or unknown LCD driver
-        Serial.print(F("Unknown LCD driver chip: "));
-        Serial.println(identifier, HEX);
-        Serial.println(F("If using the Elegoo 2.8\" TFT Arduino shield, the line:"));
-        Serial.println(F("  #define USE_Elegoo_SHIELD_PINOUT"));
-        Serial.println(F("should appear in the library header (Elegoo_TFT.h)."));
-        Serial.println(F("If using the breakout board, it should NOT be #defined!"));
-        Serial.println(F("Also if using the breakout, double-check that all wiring"));
-        Serial.println(F("matches the tutorial."));
-        identifier = 0x9328;
+	tft.reset();
+	tft.setTextSize(2);
+	//prints out the current LCD driver version
+	uint16_t identifier = tft.readID();
+	if (identifier == 0x9325) {
+		Serial.println(F("Found ILI9325 LCD driver"));
+	} else if (identifier == 0x9328) {
+		Serial.println(F("Found ILI9328 LCD driver"));
+	} else if (identifier == 0x4535) {
+		Serial.println(F("Found LGDP4535 LCD driver"));
+	} else if (identifier == 0x7575) {
+		Serial.println(F("Found HX8347G LCD driver"));
+	} else if (identifier == 0x9341) {
+		Serial.println(F("Found ILI9341 LCD driver"));
+	} else if (identifier == 0x8357) {
+		Serial.println(F("Found HX8357D LCD driver"));
+	} else if (identifier == 0x0101) {
+		identifier = 0x9341;
+		Serial.println(F("Found 0x9341 LCD driver"));
+	} else if (identifier == 0x1111) {
+		identifier = 0x9328;
+		Serial.println(F("Found 0x9328 LCD driver"));
+	} else { //prints to serial monitor if wiring is bad or unknown LCD driver
+		Serial.print(F("Unknown LCD driver chip: "));
+		Serial.println(identifier, HEX);
+		Serial.println(F("If using the Elegoo 2.8\" TFT Arduino shield, the line:"));
+		Serial.println(F("  #define USE_Elegoo_SHIELD_PINOUT"));
+		Serial.println(F("should appear in the library header (Elegoo_TFT.h)."));
+		Serial.println(F("If using the breakout board, it should NOT be #defined!"));
+		Serial.println(F("Also if using the breakout, double-check that all wiring"));
+		Serial.println(F("matches the tutorial."));
+		identifier = 0x9328;
 
-    }
-    tft.begin(identifier);
-    tft.fillScreen(NONE);
+	}
+	tft.begin(identifier);
+	tft.fillScreen(NONE);
 
 }
 
 //Arduino loop
 void loop(void) {
-    setupSystem();
+	setupSystem();
 }
 #else
 
 int main() {
-    setupSystem();
+	setupSystem();
 }
 
 #endif
 
 //Starts up the system by creating all the objects that are needed to run the system
 void setupSystem() {
-    TCB *queue[6];
+	TCB *queue[6];
 
-    /*
-     * Init the various tasks
-     */
+	/*
+	* Init the various tasks
+	*/
 
-    //Power Subsystem
-    TCB powerSubsystem;
-    PowerSubsystemData powerSubsystemData;
-    powerSubsystemData.solarPanelState = &SolarPanelState;
-    powerSubsystemData.batteryLevel = &BatteryLevel;
-    powerSubsystemData.powerConsumption = &PowerConsumption;
-    powerSubsystemData.powerGeneration = &PowerGeneration;
 
-    powerSubsystem.taskDataPtr = (void *) &powerSubsystemData;
-    powerSubsystem.task = &powerSubsystemTask;
+	TCB solarPanelSubsystem;
+	SolarPanelControlData solarPanelControlData;
 
-    queue[0] = &powerSubsystem;
+	solarPanelControlData.solarPanelState = &SolarPanelState;
+	solarPanelControlData.solarPanelDeploy = &SolarPanelDeploy;
+	solarPanelControlData.solarPanelRetract = &SolarPanelRetract;
+	solarPanelControlData.driveMotorSpeedInc = &DriveMotorSpeedInc;
+	solarPanelControlData.driveMotorSpeedDec = &DriveMotorSpeedDec;
 
-    //Thruster Subsystem
-    TCB thrusterSubsystem;
-    ThrusterSubsystemData thrusterSubsystemData;
-    thrusterSubsystemData.fuelLevel = &FuelLevel;
-    thrusterSubsystemData.thrusterControl = &ThrusterControl;
+	solarPanelSubsystem.taskDataPtr = (void *)&solarPanelControlData;
+	solarPanelSubsystem.task = &solarPanelSubsystemTask;
 
-    thrusterSubsystem.taskDataPtr = (void *) &thrusterSubsystemData;
-    thrusterSubsystem.task = &thrusterSubsystemTask;
+	queue[6] = &solarPanelSubsystem;
 
-    queue[1] = &thrusterSubsystem;
+	//Power Subsystem
+	TCB powerSubsystem;
+	PowerSubsystemData powerSubsystemData;
+	powerSubsystemData.solarPanelState = &SolarPanelState;
+	powerSubsystemData.batteryLevel = &BatteryLevel;
+	powerSubsystemData.powerConsumption = &PowerConsumption;
+	powerSubsystemData.powerGeneration = &PowerGeneration;
+	powerSubsystemData.batteryLevelArrayIndex = 0;
 
-    //Satellite Comms
-    TCB satelliteComs;
-    SatelliteComsData satelliteComsData;
-    satelliteComsData.thrusterControl = &ThrusterControl;
-    satelliteComsData.fuelLevel = &FuelLevel;
-    satelliteComsData.powerGeneration = &PowerGeneration;
-    satelliteComsData.powerConsumption = &PowerConsumption;
-    satelliteComsData.batteryLevel = &BatteryLevel;
-    satelliteComsData.solarPanelState = &SolarPanelState;
-    satelliteComsData.batteryLow = &BatteryLow;
-    satelliteComsData.fuelLow = &FuelLow;
+	powerSubsystem.taskDataPtr = (void *)&powerSubsystemData;
+	powerSubsystem.task = &powerSubsystemTask;
 
-    satelliteComs.taskDataPtr = (void *) &satelliteComsData;
-    satelliteComs.task = &satelliteComsTask;
+	queue[0] = &powerSubsystem;
 
-    queue[2] = &satelliteComs;
+	//Thruster Subsystem
+	TCB thrusterSubsystem;
+	ThrusterSubsystemData thrusterSubsystemData;
+	thrusterSubsystemData.fuelLevel = &FuelLevel;
+	thrusterSubsystemData.thrusterControl = &ThrusterControl;
 
-    //Console Display
-    TCB consoleDisplay;
-    ConsoleDisplayData consoleDisplayData;
-    consoleDisplayData.fuelLow = &FuelLow;
-    consoleDisplayData.batteryLow = &BatteryLow;
-    consoleDisplayData.solarPanelState = &SolarPanelState;
-    consoleDisplayData.batteryLevel = &BatteryLevel;
-    consoleDisplayData.fuelLevel = &FuelLevel;
-    consoleDisplayData.powerConsumption = &PowerConsumption;
-    consoleDisplayData.powerGeneration = &PowerGeneration;
+	thrusterSubsystem.taskDataPtr = (void *)&thrusterSubsystemData;
+	thrusterSubsystem.task = &thrusterSubsystemTask;
 
-    consoleDisplay.taskDataPtr = (void *) &consoleDisplayData;
-    consoleDisplay.task = &consoleDisplayTask;
+	queue[1] = &thrusterSubsystem;
 
-    queue[3] = &consoleDisplay;
+	//Satellite Comms
+	TCB satelliteComs;
+	SatelliteComsData satelliteComsData;
+	satelliteComsData.thrusterControl = &ThrusterControl;
+	satelliteComsData.fuelLevel = &FuelLevel;
+	satelliteComsData.powerGeneration = &PowerGeneration;
+	satelliteComsData.powerConsumption = &PowerConsumption;
+	satelliteComsData.batteryLevel = &BatteryLevel;
+	satelliteComsData.solarPanelState = &SolarPanelState;
+	satelliteComsData.batteryLow = &BatteryLow;
+	satelliteComsData.fuelLow = &FuelLow;
 
-    //Warning Alarm
-    TCB warningAlarm;
-    WarningAlarmData warningAlarmData;
-    warningAlarmData.batteryLevel = &BatteryLevel;
-    warningAlarmData.batteryLow = &BatteryLow;
-    warningAlarmData.fuelLow = &FuelLow;
-    warningAlarmData.fuelLevel = &FuelLevel;
+	satelliteComs.taskDataPtr = (void *)&satelliteComsData;
+	satelliteComs.task = &satelliteComsTask;
 
-    warningAlarm.taskDataPtr = (void *) &warningAlarmData;
-    warningAlarm.task = &warningAlarmTask;
+	queue[2] = &satelliteComs;
 
-    queue[4] = &warningAlarm;
-    queue[5] = 0x0;
+	//Console Display
+	TCB consoleDisplay;
+	ConsoleDisplayData consoleDisplayData;
+	consoleDisplayData.fuelLow = &FuelLow;
+	consoleDisplayData.batteryLow = &BatteryLow;
+	consoleDisplayData.solarPanelState = &SolarPanelState;
+	consoleDisplayData.batteryLevel = &BatteryLevel;
+	consoleDisplayData.fuelLevel = &FuelLevel;
+	consoleDisplayData.powerConsumption = &PowerConsumption;
+	consoleDisplayData.powerGeneration = &PowerGeneration;
 
-    //Starts the schedule looping
-    scheduleTask(queue);
+	consoleDisplay.taskDataPtr = (void *)&consoleDisplayData;
+	consoleDisplay.task = &consoleDisplayTask;
+
+	queue[3] = &consoleDisplay;
+
+	//Warning Alarm
+	TCB warningAlarm;
+	WarningAlarmData warningAlarmData;
+	warningAlarmData.batteryLevel = &BatteryLevel;
+	warningAlarmData.batteryLow = &BatteryLow;
+	warningAlarmData.fuelLow = &FuelLow;
+	warningAlarmData.fuelLevel = &FuelLevel;
+
+	warningAlarm.taskDataPtr = (void *)&warningAlarmData;
+	warningAlarm.task = &warningAlarmTask;
+
+	queue[4] = &warningAlarm;
+	queue[5] = 0x0;
+
+	//Starts the schedule looping
+	scheduleTask(queue);
 }
 
 //Runs the loop of all six tasks, does not run the task if the task pointer is null
 void scheduleTask(TCB *tasks[6]) {
-    unsigned int currentTaskIndex = 0;
-    while (1) { //Loop forever
-        //Major cycle
-        while (currentTaskIndex < 6) {
-            TCB *task = tasks[currentTaskIndex];
-            if (task != 0x0) { //Filter out null tasks
-                task->task(task->taskDataPtr);
-            }
-            currentTaskIndex++;
-        }
-        currentTaskIndex = 0;
-    }
+	unsigned int currentTaskIndex = 0;
+	while (1) { //Loop forever
+				//Major cycle
+		while (currentTaskIndex < 6) {
+			TCB *task = tasks[currentTaskIndex];
+			if (task != 0x0) { //Filter out null tasks
+				task->task(task->taskDataPtr);
+			}
+			currentTaskIndex++;
+		}
+		currentTaskIndex = 0;
+	}
 }
 
 //Controls the execution of the power subsystem
 void powerSubsystemTask(void *powerSubsystemData) {
-    //Count of the number times this function is called.
-    // It is okay if this number wraps to 0 because we just care about if the function call is odd or even
-    static unsigned long nextExecutionTime = 0;
-    static unsigned long lastExecutionTime = 0;
-    if (nextExecutionTime == 0 || systemTime() > nextExecutionTime) {
+	//Count of the number times this function is called.
+	// It is okay if this number wraps to 0 because we just care about if the function call is odd or even
+	PowerSubsystemData *data = (PowerSubsystemData *)powerSubsystemData;
+	static unsigned long nextExecutionTime = 0;
+	static unsigned long lastExecutionTime = 0;
+	static unsigned long readBetteryLevelExecuationTime = 0;
+	if (0 == nextExecutionTime) {
+		readBetteryLevelExecuationTime = systemTime() + BatteryDelay;
+	}
+	static Bool batteryInitialRead = TRUE;
+	if (0 == nextExecutionTime || systemTime() > nextExecutionTime) {
 #if !ARDUINO && DEBUG
-        printf("powerSubsystemTask\n");
+		printf("powerSubsystemTask\n");
 #endif
-        printTaskTiming("powerSubsystemTask", lastExecutionTime);
-        lastExecutionTime = systemTime();
-        PowerSubsystemData *data = (PowerSubsystemData *) powerSubsystemData;
-        static unsigned int executionCount = 0;
-        //powerConsumption
-        static Bool consumptionIncreasing = TRUE;
-        if (consumptionIncreasing) {
-            if (executionCount % 2 == 0) {
-                *(data->powerConsumption) += 2;
-            } else {
-                *(data->powerConsumption) -= 1;
-            }
-            if (*(data->powerConsumption) > 10) {
-                consumptionIncreasing = FALSE;
-            }
-        } else {
-            if (executionCount % 2 == 0) {
-                *(data->powerConsumption) -= 2;
-            } else {
-                *(data->powerConsumption) += 1;
-            }
-            if (*(data->powerConsumption) < 5) {
-                consumptionIncreasing = TRUE;
-            }
-        }
+		printTaskTiming("powerSubsystemTask", lastExecutionTime);
+		lastExecutionTime = systemTime();
+		static unsigned int executionCount = 0;
+		//powerConsumption
+		static Bool consumptionIncreasing = TRUE;
+		if (consumptionIncreasing) {
+			if (executionCount % 2 == 0) {
+				*(data->powerConsumption) += 2;
+			} else {
+				*(data->powerConsumption) -= 1;
+			}
+			if (*(data->powerConsumption) > 10) {
+				consumptionIncreasing = FALSE;
+			}
+		} else {
+			if (executionCount % 2 == 0) {
+				*(data->powerConsumption) -= 2;
+			} else {
+				*(data->powerConsumption) += 1;
+			}
+			if (*(data->powerConsumption) < 5) {
+				consumptionIncreasing = TRUE;
+			}
+		}
 
-        //powerGeneration
-        if (*data->solarPanelState) {
-            if (*data->batteryLevel > 95) {
-                *data->solarPanelState = FALSE;
-                *data->powerGeneration = 0;
-            } else if (*data->batteryLevel < 50) {
-                //Increment the variable by 2 every even numbered time
-                if (executionCount % 2 == 0) {
-                    (*data->powerGeneration) += 2;
-                } else { //Increment the variable by 1 every odd numbered time
-                    (*data->powerGeneration) += 1;
-                }
-            } else {
-                //Increment the variable by 2 every even numbered time
-                if (executionCount % 2 == 0) {
-                    (*data->powerGeneration) += 2;
-                }
-            }
-        } else {
-            if (*data->batteryLevel <= 10) {
-                *data->solarPanelState = TRUE;
-            }
-        }
-        //batteryLevel
-        if (*data->solarPanelState) { //If deployed
-            short result = *data->batteryLevel - (*(data->powerConsumption)) + (*(data->powerGeneration));
-            if (result < 0) {
-                *data->batteryLevel = 0;
-            } else {
-                *data->batteryLevel = unsignedShortMin((unsigned short) result, 100);
-            }
-        } else { //If not deplyed
-            int result = *data->batteryLevel - 3 * (*(data->powerConsumption));
-            if (result < 0) {
-                *data->batteryLevel = 0;
-            } else {
-                *data->batteryLevel = (unsigned short) result;
-            }
-        }
-        nextExecutionTime = systemTime() + runDelay;
-        executionCount++;
-    }
+		//powerGeneration
+		if (*data->solarPanelState) {
+			if (*data->batteryLevel > 34) {
+				*data->solarPanelState = FALSE;
+				*data->powerGeneration = 0;
+			} else if (*data->batteryLevel < 18) {
+				//Increment the variable by 2 every even numbered time
+				if (executionCount % 2 == 0) {
+					(*data->powerGeneration) += 2;
+				} else { //Increment the variable by 1 every odd numbered time
+					(*data->powerGeneration) += 1;
+				}
+			} else {
+				//Increment the variable by 2 every even numbered time
+				if (executionCount % 2 == 0) {
+					(*data->powerGeneration) += 2;
+				}
+			}
+		} else {
+			if (*data->batteryLevel <= 4) {
+				*data->solarPanelState = TRUE;
+			}
+		}
+		
+		//Waits 600us before updating new level to ensure a valid reading
+			//Converts analogRead from 50 to 332 for a 1.5V Battery to represent 0 to 36V
+			//50 is an offset of the values, and 0.12766 is the conversion from 282 values to 36V
+
+		//Can easily be changed to take measurements every 600 us by adding another boolean
+		if (!batteryInitialRead) {
+			batteryRead(data);
+		}
+
+
+		/* DEPRECATED
+		//batteryLevel
+		if (*data->solarPanelState) { //If deployed
+			short result = *data->batteryLevel - (*(data->powerConsumption)) + (*(data->powerGeneration));
+			if (result < 0) {
+				*data->batteryLevel = 0;
+			} else {
+				*data->batteryLevel = unsignedShortMin((unsigned short)result, 100);
+			}
+		} else { //If not deplyed
+			int result = *data->batteryLevel - 3 * (*(data->powerConsumption));
+			if (result < 0) {
+				*data->batteryLevel = 0;
+			} else {
+				*data->batteryLevel = (unsigned short)result;
+			}
+		}
+		*/
+
+
+		nextExecutionTime = systemTime() + runDelay;
+		executionCount++;
+	}
+	if (batteryInitialRead && systemTime() >= readBetteryLevelExecuationTime) {
+		batteryRead(data);
+	}
+}
+
+void batteryRead(PowerSubsystemData * data) {
+	short newVal = ((analogRead(BatteryPin) - 50)*0.12766 - (*(data->powerConsumption)) + (*(data->powerGeneration)));
+	if (newVal < 0) {
+		newVal = 0;
+	} else if (newVal > 36) {
+		newVal = 36;
+	}
+	BatteryLevelArray[data->batteryLevelArrayIndex] = newVal;
+	data->batteryLevelArrayIndex = (data->batteryLevelArrayIndex + 1) % 16;
 }
 
 //Controls the execution of the thruster subsystem
 void thrusterSubsystemTask(void *thrusterSubsystemData) {
-    static unsigned long nextExecutionTime = 0;
-    static unsigned long lastExecutionTime = 0;
-    if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+	static unsigned long nextExecutionTime = 0;
+	static unsigned long lastExecutionTime = 0;
+	if (0 == nextExecutionTime || nextExecutionTime < systemTime()) {
 #if !ARDUINO && DEBUG
-        printf("thrusterSubsystemTask\n");
+		printf("thrusterSubsystemTask\n");
 #endif
-        printTaskTiming("thrusterSubsystemTask", lastExecutionTime);
-        lastExecutionTime = systemTime();
-        ThrusterSubsystemData *data = (ThrusterSubsystemData *) thrusterSubsystemData;
-        unsigned short left = 0, right = 0, up = 0, down = 0;
+		printTaskTiming("thrusterSubsystemTask", lastExecutionTime);
+		lastExecutionTime = systemTime();
+		ThrusterSubsystemData *data = (ThrusterSubsystemData *)thrusterSubsystemData;
+		unsigned short left = 0, right = 0, up = 0, down = 0;
 
-        unsigned int signal = *(data->thrusterControl);
+		unsigned int signal = *(data->thrusterControl);
 
-        unsigned int direction = signal & (0xF); // Get the last 4 bits
-        unsigned int magnitude = (signal & (0xF0)) >> 4; // Get the 5-7th bit and shift if back down
-        unsigned int duration = (signal & (0xFF00)) >> 8;
+		unsigned int direction = signal & (0xF); // Get the last 4 bits
+		unsigned int magnitude = (signal & (0xF0)) >> 4; // Get the 5-7th bit and shift if back down
+		unsigned int duration = (signal & (0xFF00)) >> 8;
 
-        //Debug print info
+		//Debug print info
 #if !ARDUINO && DEBUG
-        printf("\t\tDirection %d\n", direction);
-        printf("\t\tMagnitude %d\n", magnitude);
-        printf("\t\tDuration %d\n", duration);
-        printf("thrusterSubsystemTask\n");
+		printf("\t\tDirection %d\n", direction);
+		printf("\t\tMagnitude %d\n", magnitude);
+		printf("\t\tDuration %d\n", duration);
+		printf("thrusterSubsystemTask\n");
 #endif
 
 
-        //Adjust fuel level based on command
-        if (*data->fuelLevel > 0 && (int) *data->fuelLevel >= ((int) *data->fuelLevel - 4 * duration / 100)) {
-            *data->fuelLevel = unsignedShortMax(0, *data->fuelLevel -
-                                                   4 * duration /
-                                                   100); //magnitude at this point is full on and full off
-        } else {
-            *data->fuelLevel = 0;
-        }
+		//Adjust fuel level based on command
+		if (*data->fuelLevel > 0 && (int)*data->fuelLevel >= ((int)*data->fuelLevel - 4 * duration / 100)) {
+			*data->fuelLevel = unsignedShortMax(0, *data->fuelLevel -
+				4 * duration /
+				100); //magnitude at this point is full on and full off
+		} else {
+			*data->fuelLevel = 0;
+		}
 
 
-        nextExecutionTime = systemTime() + runDelay;
-    }
+		nextExecutionTime = systemTime() + runDelay;
+	}
 
 }
 
 //Generates a random signal for the thruster based on the assignment specs
 //Choose a random direction, magnitude, and duration and shifts the bits to fit that information into 16 bits
 unsigned int getRandomThrustSignal() {
-    unsigned int signal = 1;
-    unsigned short direction = (unsigned short) randomInteger(0, 4);
-    if (direction == 4) //No thrust
-        return 0;
-    signal = signal << direction;
-    unsigned int magnitude = randomInteger(0, 15);
-    unsigned int duration = randomInteger(0, 255);
+	unsigned int signal = 1;
+	unsigned short direction = (unsigned short)randomInteger(0, 4);
+	if (direction == 4) //No thrust
+		return 0;
+	signal = signal << direction;
+	unsigned int magnitude = randomInteger(0, 15);
+	unsigned int duration = randomInteger(0, 255);
 
-    signal = signal | (magnitude << 4);
-    signal = signal | (duration << 8);
-    return signal;
+	signal = signal | (magnitude << 4);
+	signal = signal | (duration << 8);
+	return signal;
 }
 
 //Controls the execution of the satellite coms subsystem
 void satelliteComsTask(void *satelliteComsData) {
-    static unsigned long nextExecutionTime = 0;
-    static unsigned long lastExecutionTime = 0;
-    if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+	static unsigned long nextExecutionTime = 0;
+	static unsigned long lastExecutionTime = 0;
+	if (0 == nextExecutionTime || nextExecutionTime < systemTime()) {
 #if !ARDUINO && DEBUG
-        printf("satelliteComsTask\n");
+		printf("satelliteComsTask\n");
 #endif
-        printTaskTiming("satelliteComsTask", lastExecutionTime);
-        lastExecutionTime = systemTime();
-        SatelliteComsData *data = (SatelliteComsData *) satelliteComsData;
+		printTaskTiming("satelliteComsTask", lastExecutionTime);
+		lastExecutionTime = systemTime();
+		SatelliteComsData *data = (SatelliteComsData *)satelliteComsData;
 
-        //TODO: In future labs, send the following data:
-        /*
-            * Fuel Low
-            * Battery Low
-            * Solar Panel State
-            * Battery Level
-            * Fuel Level
-            * Power Consumption
-            * Power Generation
-         */
+		//TODO: In future labs, send the following data:
+		/*
+		* Fuel Low
+		* Battery Low
+		* Solar Panel State
+		* Battery Level
+		* Fuel Level
+		* Power Consumption
+		* Power Generation
+		*/
 
-        *(data->thrusterControl) = getRandomThrustSignal();
-        nextExecutionTime = systemTime() + runDelay;
-    }
+		*(data->thrusterControl) = getRandomThrustSignal();
+		nextExecutionTime = systemTime() + runDelay;
+	}
 }
 
 //Controls the execution of the console display subsystem
 void consoleDisplayTask(void *consoleDisplayData) {
-    static unsigned long nextExecutionTime = 0;
-    static unsigned long lastExecutionTime = 0;
-    if (nextExecutionTime == 0 || nextExecutionTime < systemTime()) {
+	static unsigned long nextExecutionTime = 0;
+	static unsigned long lastExecutionTime = 0;
+	if (0 == nextExecutionTime || nextExecutionTime < systemTime()) {
 #if !ARDUINO && DEBUG
-        printf("consoleDisplayTask\n");
+		printf("consoleDisplayTask\n");
 #endif
-        printTaskTiming("consoleDisplayTask", lastExecutionTime);
-        lastExecutionTime = systemTime();
-        ConsoleDisplayData *data = (ConsoleDisplayData *) consoleDisplayData;
-        Bool inStatusMode = TRUE; //TODO get this from some external input
-        //printf("consoleDisplayTask\n");
-        if (inStatusMode) {
-            //Print
-            //Solar Panel State
-            //Battery Level
-            //Fuel Level
-            //Power Consumption
+		printTaskTiming("consoleDisplayTask", lastExecutionTime);
+		lastExecutionTime = systemTime();
+		ConsoleDisplayData *data = (ConsoleDisplayData *)consoleDisplayData;
+		Bool inStatusMode = TRUE; //TODO get this from some external input
+								  //printf("consoleDisplayTask\n");
+		if (inStatusMode) {
+			//Print
+			//Solar Panel State
+			//Battery Level
+			//Fuel Level
+			//Power Consumption
 #if ARDUINO
-            Serial.print("\tSolar Panel State: ");
-            Serial.println((*data->solarPanelState ? " ON" : "OFF"));
-            Serial.print("\tBattery Level: ");
-            Serial.println(*data->batteryLevel);
-            Serial.print("\tFuel Level: ");
-            Serial.println(*data->fuelLevel);
-            Serial.print("\tPower Consumption: ");
-            Serial.println(*data->powerConsumption);
-            Serial.print("\tPower Generation: ");
-            Serial.println(*data->powerGeneration);
+			Serial.print("\tSolar Panel State: ");
+			Serial.println((*data->solarPanelState ? " ON" : "OFF"));
+			Serial.print("\tBattery Level: ");
+			Serial.println(*data->batteryLevel);
+			Serial.print("\tFuel Level: ");
+			Serial.println(*data->fuelLevel);
+			Serial.print("\tPower Consumption: ");
+			Serial.println(*data->powerConsumption);
+			Serial.print("\tPower Generation: ");
+			Serial.println(*data->powerGeneration);
 #else
-            printf("\tSolar Panel State: ");
-            printf((*data->solarPanelState ? " ON" : "OFF"));
-            printf("\tBattery Level: ");
-            printf("%d", *data->batteryLevel);
-            printf("\tFuel Level: ");
-            printf("%d", *data->fuelLevel);
-            printf("\tPower Consumption: ");
-            printf("%d", *data->powerConsumption);
-            printf("\tPower Generation: ");
-            printf("%d\n", *data->powerGeneration);
+			printf("\tSolar Panel State: ");
+			printf((*data->solarPanelState ? " ON" : "OFF"));
+			printf("\tBattery Level: ");
+			printf("%d", *data->batteryLevel);
+			printf("\tFuel Level: ");
+			printf("%d", *data->fuelLevel);
+			printf("\tPower Consumption: ");
+			printf("%d", *data->powerConsumption);
+			printf("\tPower Generation: ");
+			printf("%d\n", *data->powerGeneration);
 #endif
 
-        } else {
+		} else {
 #if ARDUINO
-            if (*data->fuelLow == TRUE) {
-                Serial.println("Fuel Low!");
-            }
-            if (*data->batteryLow == TRUE) {
-                Serial.println("Battery Low!");
-            }
-        }
+			if (*data->fuelLow == TRUE) {
+				Serial.println("Fuel Low!");
+			}
+			if (*data->batteryLow == TRUE) {
+				Serial.println("Battery Low!");
+			}
+		}
 
-        Serial.println();
+		Serial.println();
 #else
-        }
+	}
 #endif
-        nextExecutionTime = systemTime() + runDelay;
-    }
+		nextExecutionTime = systemTime() + runDelay;
+}
 }
 
 //Controls the execution of the warning alarm subsystem
 void warningAlarmTask(void *warningAlarmData) {
-    WarningAlarmData *data = (WarningAlarmData *) warningAlarmData;
-    static int fuelStatus = NONE;
-    static int batteryStatus = NONE;
-    static unsigned long hideFuelTime = 0;
-    static unsigned long showFuelTime = 0;
-    static unsigned long hideBatteryTime = 0;
-    static unsigned long showBatteryTime = 0;
+	WarningAlarmData *data = (WarningAlarmData *)warningAlarmData;
+	static int fuelStatus = NONE;
+	static int batteryStatus = NONE;
+	static unsigned long hideFuelTime = 0;
+	static unsigned long showFuelTime = 0;
+	static unsigned long hideBatteryTime = 0;
+	static unsigned long showBatteryTime = 0;
 
-    *data->fuelLow = *data->fuelLevel <= 10 ? TRUE : FALSE;
-    *data->batteryLow = *data->batteryLow <= 10 ? TRUE : FALSE;
+	*data->fuelLow = *data->fuelLevel <= 10 ? TRUE : FALSE;
+	*data->batteryLow = *data->batteryLow <= 10 ? TRUE : FALSE;
 
-    int fuelDelay = (*data->fuelLevel <= 10) ? 2000 : 1000;
-    int fuelColor = (*data->fuelLevel <= 10) ? RED : ORANGE;
+	int fuelDelay = (*data->fuelLevel <= 10) ? LongTimeDelay : ShortTimeDelay;
+	int fuelColor = (*data->fuelLevel <= 10) ? RED : ORANGE;
 
-    if (*data->fuelLevel <= 50) {
-        if (fuelStatus == fuelColor) {
-            if (showFuelTime == 0) { //If showing fuel status
-                if (hideFuelTime < systemTime()) {
-                    showFuelTime = systemTime() + fuelDelay;
-                    hideFuelTime = 0;
-                    //TODO hide fuel status with color fuelColor
-                    print("FUEL", 4, NONE, 0);
-                }
-            } else { //If hiding fuel status
-                if (showFuelTime < systemTime()) {
-                    hideFuelTime = systemTime() + fuelDelay;
-                    showFuelTime = 0;
-                    //TODO show fuel status with fuelColor
-                    print("FUEL", 4, fuelColor, 0);
-                }
-            }
-        } else {
-            fuelStatus = fuelColor;
-            print("FUEL", 4, fuelColor, 0);
-            hideFuelTime = systemTime() + fuelDelay;
-        }
-    } else if (fuelStatus != GREEN) {
-        print("FUEL", 4, GREEN, 0);
-        fuelStatus = GREEN;
-    }
+	if (*data->fuelLevel <= 50) {
+		if (fuelStatus == fuelColor) {
+			if (showFuelTime == 0) { //If showing fuel status
+				if (hideFuelTime < systemTime()) {
+					showFuelTime = systemTime() + fuelDelay;
+					hideFuelTime = 0;
+					//TODO hide fuel status with color fuelColor
+					print("FUEL", 4, NONE, 0);
+				}
+			} else { //If hiding fuel status
+				if (showFuelTime < systemTime()) {
+					hideFuelTime = systemTime() + fuelDelay;
+					showFuelTime = 0;
+					//TODO show fuel status with fuelColor
+					print("FUEL", 4, fuelColor, 0);
+				}
+			}
+		} else {
+			fuelStatus = fuelColor;
+			print("FUEL", 4, fuelColor, 0);
+			hideFuelTime = systemTime() + fuelDelay;
+		}
+	} else if (fuelStatus != GREEN) {
+		print("FUEL", 4, GREEN, 0);
+		fuelStatus = GREEN;
+	}
 
-    int batteryDelay = (*data->batteryLevel <= 10) ? 1000 : 2000;
-    int batteryColor = (*data->batteryLevel <= 10) ? RED : ORANGE;
-    if (*data->batteryLevel <= 50) {
-        if (batteryStatus == batteryColor) {
-            if (showBatteryTime == 0) { //If showing battery status
-                if (hideBatteryTime < systemTime()) {
-                    showBatteryTime = systemTime() + batteryDelay;
-                    hideBatteryTime = 0;
-                    //TODO hide battery status with color batteryColor
-                    print("BATTERY", 7, NONE, 1);
-                }
-            } else { //If hiding battery status
-                if (showBatteryTime < systemTime()) {
-                    hideBatteryTime = systemTime() + batteryDelay;
-                    showBatteryTime = 0;
-                    //TODO show battery status
-                    print("BATTERY", 7, batteryColor, 1);
-                }
-            }
-        } else {
-            batteryStatus = batteryColor;
-            print("BATTERY", 7, batteryColor, 1);
-            hideBatteryTime = systemTime() + batteryDelay;
-        }
-    } else if (batteryStatus != GREEN) {
-        print("BATTERY", 7, GREEN, 1);
-        batteryStatus = GREEN;
-    }
+	int batteryDelay = (*data->batteryLevel <= 10) ? ShortTimeDelay : LongTimeDelay;
+	int batteryColor = (*data->batteryLevel <= 10) ? RED : ORANGE;
+	if (*data->batteryLevel <= 50) {
+		if (batteryStatus == batteryColor) {
+			if (showBatteryTime == 0) { //If showing battery status
+				if (hideBatteryTime < systemTime()) {
+					showBatteryTime = systemTime() + batteryDelay;
+					hideBatteryTime = 0;
+					//TODO hide battery status with color batteryColor
+					print("BATTERY", 7, NONE, 1);
+				}
+			} else { //If hiding battery status
+				if (showBatteryTime < systemTime()) {
+					hideBatteryTime = systemTime() + batteryDelay;
+					showBatteryTime = 0;
+					//TODO show battery status
+					print("BATTERY", 7, batteryColor, 1);
+				}
+			}
+		} else {
+			batteryStatus = batteryColor;
+			print("BATTERY", 7, batteryColor, 1);
+			hideBatteryTime = systemTime() + batteryDelay;
+		}
+	} else if (batteryStatus != GREEN) {
+		print("BATTERY", 7, GREEN, 1);
+		batteryStatus = GREEN;
+	}
 }
 
 //Controls the execution of the Keypad task
 void consoleKeypadTask(void *consoleKeypadData) {
-    ConsoleKeypadData *data = (ConsoleKeypadData *) consoleKeypadData;
+	ConsoleKeypadData *data = (ConsoleKeypadData *)consoleKeypadData;
 }
 
 //Controls the execution of the VehicleComms task
 void vehicleCommsTask(void *vehicleCommsData) {
-    VehicleCommsData *data = (VehicleCommsData *) vehicleCommsData;
+	VehicleCommsData *data = (VehicleCommsData *)vehicleCommsData;
 
 }
 
 //Returns a random integer between low and high inclusively
 //Code taken from class website: https://class.ece.uw.edu/474/peckol/assignments/lab2/rand1.c
 int randomInteger(int low, int high) {
-    double randNum = 0.0;
-    int multiplier = 2743;
-    int addOn = 5923;
-    double max = INT_MAX + 1.0;
+	double randNum = 0.0;
+	int multiplier = 2743;
+	int addOn = 5923;
+	double max = INT_MAX + 1.0;
 
-    int retVal = 0;
+	int retVal = 0;
 
-    if (low > high)
-        retVal = randomInteger(high, low);
-    else {
-        randomGenerationSeed = randomGenerationSeed * multiplier + addOn;
-        randNum = randomGenerationSeed;
+	if (low > high)
+		retVal = randomInteger(high, low);
+	else {
+		randomGenerationSeed = randomGenerationSeed * multiplier + addOn;
+		randNum = randomGenerationSeed;
 
-        if (randNum < 0) {
-            randNum = randNum + max;
-        }
+		if (randNum < 0) {
+			randNum = randNum + max;
+		}
 
-        randNum = randNum / max;
+		randNum = randNum / max;
 
-        retVal = ((int) ((high - low + 1) * randNum)) + low;
-    }
+		retVal = ((int)((high - low + 1) * randNum)) + low;
+	}
 
-    return retVal;
+	return retVal;
 }
 
 //Prints a string to the tft given text, the length of the text, a color, and a line number
 void print(char str[], int length, int color, int line) {
-    //To flash the selected line, you must print exact same string black then recolor
+	//To flash the selected line, you must print exact same string black then recolor
 #if ARDUINO
-    for (int i = 0; i < length; i++) {
-        tft.setTextColor(color);
-        tft.setCursor(i * 12, line * 16);
-        tft.print(str[i]);
-    }
+	for (int i = 0; i < length; i++) {
+		tft.setTextColor(color);
+		tft.setCursor(i * 12, line * 16);
+		tft.print(str[i]);
+	}
 #else
-    printf("%s", str);
-    printf(" color: %d - line: %d\n", color, line);
+	printf("%s", str);
+	printf(" color: %d - line: %d\n", color, line);
 #endif
 }
 
 //Starts up the system by creating all the objects that are needed to run the system
 void printTaskTiming(char taskName[], unsigned long lastRunTime) {
 #if ARDUINO
-    if (shouldPrintTaskTiming) {
-        Serial.print(taskName);
-        Serial.print(" - cycle delay: ");
-        if (lastRunTime > 0) {
-            Serial.println((double) (systemTime() - lastRunTime) / 1000.0, 4);
-        } else {
-            Serial.println(0.0, 4);
-        }
-    }
+	if (shouldPrintTaskTiming) {
+		Serial.print(taskName);
+		Serial.print(" - cycle delay: ");
+		if (lastRunTime > 0) {
+			Serial.println((double)(systemTime() - lastRunTime) / 1000000.0, 4);
+		} else {
+			Serial.println(0.0, 4);
+		}
+	}
 #endif
 }
 
 //Returns the current system time in milliseconds
 unsigned long systemTime() {
 #if ARDUINO
-    return millis();
+	return micros();
 #else
-    return (unsigned long) time(NULL) * 1000;
+	return (unsigned long)time(NULL) * 1000000;
 #endif
 }
