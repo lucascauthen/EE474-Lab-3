@@ -77,13 +77,32 @@ enum myBool {
 typedef enum myBool Bool;
 #endif
 
-char INC_CHAR = '1';
-char DEC_CHAR = '-';
-char ZERO_INC_DEC_CHAR = '0';
+
+const int PWM_OUTPUT_PIN = 23;
+
+const char INC_CHAR = '1';
+const char DEC_CHAR = '-';
+const char NO_SOLAR_PANEL_INPUT = '0';
+char LAST_SOLAR_PANEL_CONTROL_CHAR = NO_SOLAR_PANEL_INPUT;
+
+const char FORWARD_CHAR = 'F';
+const char BACK_CHAR = 'B';
+const char LEFT_CHAR = 'L';
+const char RIGHT_CHAR = 'R';
+const char DRILL_START_CHAR = 'D';
+const char DRILL_STOP_CHAR = 'H';
+const char NO_VEHICLE_COMMAND = '/';
+char LAST_VEHICLE_COMM = NO_VEHICLE_COMMAND;
+
 
 unsigned long runDelay = 5000000; //5 Sec
 unsigned long SolarPanelDeployTime = 5000000; //5 Sec
 unsigned long PWMPeriod = 500000;
+const unsigned short PWM_INC = 5;
+const unsigned short PWM_100 = 75;
+const unsigned short PWM_MAX = 75;
+const unsigned short PWM_MIN = 0;
+const unsigned short PWM_DEFAULT = 15;
 long randomGenerationSeed = 98976;
 Bool shouldPrintTaskTiming = TRUE;
 
@@ -112,7 +131,7 @@ Bool SolarPanelDeploy = FALSE;
 Bool SolarPanelRetract = FALSE;
 Bool DriveMotorSpeedInc = FALSE;
 Bool DriveMotorSpeedDec = FALSE;
-unsigned short MotorDrive = 0;
+unsigned short DriveMotorSpeed = 0;
 
 //Status Management and Annunciation
 //Same as Power Management
@@ -157,7 +176,7 @@ struct PowerSubsystemDataStruct {
     unsigned short *batteryLevel;
     unsigned short *powerConsumption;
     unsigned short *powerGeneration;
-    unsigned short batteryLevelArrayIndex;
+    unsigned short *batteryLevelArrayIndex;
 };
 typedef struct PowerSubsystemDataStruct PowerSubsystemData;
 
@@ -167,6 +186,7 @@ struct SolarPanelControlDataStruct {
     Bool *solarPanelRetract;
     Bool *driveMotorSpeedInc;
     Bool *driveMotorSpeedDec;
+    unsigned short *driveMotorSpeed;
 };
 typedef struct SolarPanelControlDataStruct SolarPanelControlData;
 
@@ -258,6 +278,9 @@ void print(char str[], int length, int color, int line);
 //Starts up the system by creating all the objects that are needed to run the system
 void setupSystem();
 
+//Process earth input
+void processesEarthInput(char c);
+
 //Prints timing information for a function based on its last runtime
 void printTaskTiming(char taskName[], unsigned long lastRunTime);
 
@@ -285,7 +308,9 @@ unsigned short unsignedShortMin(long a, long b) {
 //Arduino setup function
 void setup(void) {
     Serial.begin(9600); //Sets baud rate to 9600
-    Serial1.begin(9600); //Sets baud rate to 9600
+
+    pinMode(PWM_OUTPUT_PIN, OUTPUT); //SETUP PWM OUTPUT SIGNAL
+
     Serial.println(F("TFT LCD test")); //Prints to serial monitor
 
     //determines if shield or board
@@ -401,6 +426,7 @@ void setupSystem() {
     solarPanelControlData.solarPanelRetract = &SolarPanelRetract;
     solarPanelControlData.driveMotorSpeedInc = &DriveMotorSpeedInc;
     solarPanelControlData.driveMotorSpeedDec = &DriveMotorSpeedDec;
+    solarPanelControlData.driveMotorSpeed = &DriveMotorSpeed;
 
     solarPanelControlTCB.taskDataPtr = (void *) &solarPanelControlData;
     solarPanelControlTCB.task = &solarPanelControlTask;
@@ -510,7 +536,35 @@ void scheduleTask() {
             } else {
                 cur = cur->next; //This happens with the natural progression of the queue
             }
+#if ARDUINO_ON
+            while (Serial.available()) {
+                char input = Serial.read();
+                processesEarthInput(input);
+            }
+#endif
         }
+    }
+}
+
+void processesEarthInput(char in) {
+    if (INC_CHAR == in) {
+        LAST_SOLAR_PANEL_CONTROL_CHAR = in;
+    } else if (DEC_CHAR == in) {
+        LAST_SOLAR_PANEL_CONTROL_CHAR = in;
+    } else if (NO_SOLAR_PANEL_INPUT == in) {
+        LAST_SOLAR_PANEL_CONTROL_CHAR = in;
+    } else if (FORWARD_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
+    } else if (BACK_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
+    } else if (LEFT_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
+    } else if (RIGHT_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
+    } else if (DRILL_START_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
+    } else if (DRILL_STOP_CHAR == in) {
+        LAST_VEHICLE_COMM = in;
     }
 }
 
@@ -559,7 +613,7 @@ void powerSubsystemTask(void *powerSubsystemData) {
         //powerGeneration
         if (*data->solarPanelState) {
             if (*data->batteryLevel > 34) {
-                if(*data->solarPanelRetract) {  //If we have not already signalled to retract
+                if (*data->solarPanelRetract) {  //If we have not already signalled to retract
                     insertNode(&solarPanelControlTCB); //Start the task
                 }
                 *data->solarPanelDeploy = FALSE;
@@ -580,7 +634,7 @@ void powerSubsystemTask(void *powerSubsystemData) {
             }
         } else {
             if (*data->batteryLevel <= 4) {
-                if(!*data->solarPanelDeploy) { //If we have not already signalled to deploy
+                if (!*data->solarPanelDeploy) { //If we have not already signalled to deploy
                     insertNode(&solarPanelControlTCB); //Add the task
                 }
                 *data->solarPanelDeploy = TRUE;
@@ -876,7 +930,15 @@ void solarPanelControlTask(void *solarPanelControlData) {
     static unsigned long lastRunTime = 0;
     static unsigned long elapsedTime = 0;
 
-    Bool pwmOutput = FALSE; //Output this to arduino
+    volatile Bool pwmOutput = FALSE; //Output this to arduino
+
+    if (*data->driveMotorSpeedInc) {
+        *data->driveMotorSpeedInc = FALSE;
+        *data->driveMotorSpeed = unsignedShortMax(*data->driveMotorSpeed + PWM_INC, PWM_MAX);
+    } else if (*data->driveMotorSpeedDec) {
+        *data->driveMotorSpeedDec = FALSE;
+        *data->driveMotorSpeed = unsignedShortMin(*data->driveMotorSpeed - PWM_INC, PWM_MIN);
+    }
 
     if (!runningTask) {
 #if !ARDUINO_ON && DEBUG
@@ -886,74 +948,71 @@ void solarPanelControlTask(void *solarPanelControlData) {
         runningTask = TRUE;
         lastRunTime = systemTime();
         isDeploy = *data->solarPanelDeploy;
-        nextPWMTime = systemTime() + PWMPeriod / 2;
+        nextPWMTime = systemTime() +
+                      (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
         elapsedTime = 0;
-
-        if (isDeploy) {
-            pwmOutput = *data->driveMotorSpeedInc;
-        } else {
-            pwmOutput = *data->driveMotorSpeedDec;
-        }
     } else {
-        if (isDeploy) {
-            pwmOutput = *data->driveMotorSpeedInc && isPWMOn;
-            if (*data->driveMotorSpeedInc) {
-                elapsedTime += systemTime() - lastRunTime;
-            }
-        } else {
-            pwmOutput = *data->driveMotorSpeedDec && isPWMOn;
-            if (*data->driveMotorSpeedDec) {
-                elapsedTime += systemTime() - lastRunTime;
-            }
-        }
+        elapsedTime += systemTime() - lastRunTime * (unsigned long) (((float) PWMPeriod *
+                                                                      ((float) *data->driveMotorSpeed /
+                                                                       (float) PWM_100)));
+
         lastRunTime = systemTime();
         if (systemTime() >= nextPWMTime) {
+            if (isPWMOn) { //If we are on, we need to go off
+                nextPWMTime = systemTime() + (unsigned long) (((float) PWMPeriod *
+                                                               ((float) (PWM_100 - *data->driveMotorSpeed) /
+                                                                (float) PWM_100)));
+            } else { //If we are off we need to go on
+                nextPWMTime = systemTime() +
+                              (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
+            }
+
             isPWMOn = !isPWMOn;
-            nextPWMTime = systemTime() + PWMPeriod / 2;
+            pwmOutput = isPWMOn;
 #if !ARDUINO_ON
             printf("PWM Status: %d\n", pwmOutput);
 
 #else
             Serial.print("PWM Status: ");
             Serial.println(pwmOutput);
+            digitalWrite(PWM_OUTPUT_PIN, pwmOutput ? HIGH : LOW);
 #endif
         }
         if (elapsedTime >= SolarPanelDeployTime) {
             runningTask = FALSE;
-            pwmOutput = FALSE;
             removeNode(&solarPanelControlTCB);
             removeNode(&consoleKeypadTCB);
             *data->solarPanelState = isDeploy;
+            *data->driveMotorSpeed = PWM_DEFAULT;
+#if ARDUINO_ON
+            digitalWrite(PWM_OUTPUT_PIN, LOW); //Reset pwm signal
+#endif
         }
     }
 #if ARDUINO_ON
-    //TODO assign pin to ouput pwmOutput
+
 #endif
 }
 
 //Controls the execution of the Keypad task
 void consoleKeypadTask(void *consoleKeypadData) {
     ConsoleKeypadData *data = (ConsoleKeypadData *) consoleKeypadData;
+    static char lastProcessedInput = NO_SOLAR_PANEL_INPUT;
 #if ARDUINO_ON
-    if(Serial1.available() > 0) {
-        Serial.println("YES!!!");
-        char signal = Serial.read();
-        if(INC_CHAR == signal) {
+    if (lastProcessedInput != LAST_SOLAR_PANEL_CONTROL_CHAR) {
+
+        Serial.println("New keypad char");
+
+        char signal = LAST_SOLAR_PANEL_CONTROL_CHAR;
+        if (INC_CHAR == signal) {
             *data->driveMotorSpeedInc = TRUE;
             *data->driveMotorSpeedDec = FALSE;
-        } else if(DEC_CHAR == signal) {
+        } else if (DEC_CHAR == signal) {
             *data->driveMotorSpeedInc = FALSE;
             *data->driveMotorSpeedDec = TRUE;
-        } else if(ZERO_INC_DEC_CHAR == signal) {
-            *data->driveMotorSpeedInc = FALSE;
-            *data->driveMotorSpeedDec = FALSE;
         }
+        lastProcessedInput = LAST_SOLAR_PANEL_CONTROL_CHAR;
     }
-    *data->driveMotorSpeedInc = TRUE;
-    *data->driveMotorSpeedDec = TRUE;
-#else
-    *data->driveMotorSpeedInc = TRUE;
-    *data->driveMotorSpeedDec = TRUE;
 #endif
 }
 
