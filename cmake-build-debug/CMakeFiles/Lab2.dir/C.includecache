@@ -15,8 +15,12 @@ time.h
 -
 math.h
 -
+stdio.h
+-
 limits.h
 -
 time.h
+-
+stdlib.h
 -
 
