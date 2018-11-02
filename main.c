@@ -92,14 +92,19 @@ Bool SolarPanelState = FALSE;
 Bool FuelLow = FALSE;
 Bool BatteryLow = FALSE;
 
+//struct TaskStruct
+typedef struct TaskStruct TCB;
 struct TaskStruct {
     void (*task)(void *);
-
+	TCB *next;
+	TCB *prev;
     void *taskDataPtr;
 };
 
 typedef struct TaskStruct TCB;
 
+TCB *head = NULL;
+TCB *tail = NULL;
 
 struct PowerSubsystemDataStruct {
     Bool *solarPanelState;
@@ -166,7 +171,7 @@ void warningAlarmTask(void *warningAlarmData);
 int randomInteger(int low, int high);
 
 //Runs the loop of all six tasks, does not run the task if the task pointer is null
-void scheduleTask(TCB *tasks[6]);
+void scheduleTask();
 
 //Prints a string to the tft given text, the length of the text, a color, and a line number
 void print(char str[], int length, int color, int line);
@@ -267,10 +272,43 @@ int main() {
 
 #endif
 
+//inserts a node at the end of the list
+//code taken from class website: https://class.ece.uw.edu/474/peckol/assignments/lab3/project3Aut18.pdf
+void insert(TCB* node){
+	if(NULL == head){
+		head = node;
+		tail = node;
+	}
+	else{
+		tail->next=node;			//add onto tail
+		node->prev=tail;			//connect backwards
+		tail=node;					//update tail
+	}
+}
+
+//removes a node from the list
+void remove(TCB* node){
+	if(node == head){
+		node->next->prev=NULL;		//chop off head
+		head=node->next;			//reassign head
+	}
+	else if(node == tail){
+		node->prev->next=NULL;		//chop off tail
+		tail=node->prev;			//reassign tail
+	}
+	else{
+		node->next->prev=node->prev;	//clip next
+		node->prev->next=node->next;	//clip prev
+	}
+	//sets node links to NULL
+	node->next=NULL;
+	node->prev=NULL;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Starts up the system by creating all the objects that are needed to run the system
 void setupSystem() {
-    TCB *queue[6];
-
     /*
      * Init the various tasks
      */
@@ -285,8 +323,10 @@ void setupSystem() {
 
     powerSubsystem.taskDataPtr = (void *) &powerSubsystemData;
     powerSubsystem.task = &powerSubsystemTask;
+	powerSubsystem.next = NULL;
+	powerSubsystem.prev = NULL;
 
-    queue[0] = &powerSubsystem;
+    insert(&powerSubsystem);
 
     //Thruster Subsystem
     TCB thrusterSubsystem;
@@ -296,8 +336,10 @@ void setupSystem() {
 
     thrusterSubsystem.taskDataPtr = (void *) &thrusterSubsystemData;
     thrusterSubsystem.task = &thrusterSubsystemTask;
+	thrusterSubsystem.next = NULL;
+	thrusterSubsystem.prev = NULL;
 
-    queue[1] = &thrusterSubsystem;
+    insert(&thrusterSubsystem);
 
     //Satellite Comms
     TCB satelliteComs;
@@ -313,8 +355,10 @@ void setupSystem() {
 
     satelliteComs.taskDataPtr = (void *) &satelliteComsData;
     satelliteComs.task = &satelliteComsTask;
+	satelliteComs.next = NULL;
+	satelliteComs.prev = NULL;
 
-    queue[2] = &satelliteComs;
+    insert(&satelliteComs);
 
     //Console Display
     TCB consoleDisplay;
@@ -329,8 +373,10 @@ void setupSystem() {
 
     consoleDisplay.taskDataPtr = (void *) &consoleDisplayData;
     consoleDisplay.task = &consoleDisplayTask;
+	consoleDisplay.next = NULL;
+	consoleDisplay.prev = NULL;
 
-    queue[3] = &consoleDisplay;
+    insert(&consoleDisplay);
 
     //Warning Alarm
     TCB warningAlarm;
@@ -342,27 +388,24 @@ void setupSystem() {
 
     warningAlarm.taskDataPtr = (void *) &warningAlarmData;
     warningAlarm.task = &warningAlarmTask;
+	warningAlarm.next = NULL;
+	warningAlarm.prev = NULL;
 
-    queue[4] = &warningAlarm;
-    queue[5] = 0x0;
+    insert(&warningAlarm);
 
     //Starts the schedule looping
-    scheduleTask(queue);
+    scheduleTask();
 }
 
 //Runs the loop of all six tasks, does not run the task if the task pointer is null
-void scheduleTask(TCB *tasks[6]) {
-    unsigned int currentTaskIndex = 0;
+void scheduleTask() {
     while (1) { //Loop forever
-        //Major cycle
-        while (currentTaskIndex < 6) {
-            TCB *task = tasks[currentTaskIndex];
-            if (task != 0x0) { //Filter out null tasks
-                task->task(task->taskDataPtr);
-            }
-            currentTaskIndex++;
-        }
-        currentTaskIndex = 0;
+		if (NULL != head){
+			head->task(head->taskDataPtr);
+			TCB *node = head;
+			remove(node);
+			insert(node);
+		}
     }
 }
 
