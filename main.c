@@ -79,8 +79,13 @@ Bool shouldPrintTaskTiming = TRUE;
 unsigned int ThrusterControl = 0;
 
 //Power Management
+<<<<<<< HEAD
 unsigned int* BatteryLevelPtr;
 unsigned short BatteryLevel = 0; //TODO Remove
+=======
+unsigned int *BatteryLevelPtr;
+unsigned short BatteryLevel = 100; //TODO Remove
+>>>>>>> Fix linked list
 unsigned short FuelLevel = 100;
 unsigned short PowerConsumption = 0;
 unsigned short PowerGeneration = 0;
@@ -114,10 +119,12 @@ char Response = NULL;
 
 //struct TaskStruct
 typedef struct TaskStruct TCB;
+
 struct TaskStruct {
     void (*task)(void *);
-	TCB *next;
-	TCB *prev;
+
+    TCB *next;
+    TCB *prev;
     void *taskDataPtr;
 };
 
@@ -327,35 +334,39 @@ int main() {
 
 //inserts a node at the end of the list
 //code taken from class website: https://class.ece.uw.edu/474/peckol/assignments/lab3/project3Aut18.pdf
-void insert(TCB* node){
-	if(NULL == head){
-		head = node;
-		tail = node;
-	}
-	else{
-		tail->next=node;			//add onto tail
-		node->prev=tail;			//connect backwards
-		tail=node;					//update tail
-	}
+void insertNode(TCB *node) {
+    if (NULL == head) {
+        head = node;
+        tail = node;
+        head->next = node;
+        head->prev = node;
+    } else {
+        tail->next = node;            //add onto tail
+        node->next = head;
+        node->prev = tail;            //connect backwards
+        head->prev = node;
+        tail = node;                    //update tail
+    }
 }
 
 //removes a node from the list
-void remove(TCB* node){
-	if(node == head){
-		node->next->prev=NULL;		//chop off head
-		head=node->next;			//reassign head
-	}
-	else if(node == tail){
-		node->prev->next=NULL;		//chop off tail
-		tail=node->prev;			//reassign tail
-	}
-	else{
-		node->next->prev=node->prev;	//clip next
-		node->prev->next=node->next;	//clip prev
-	}
-	//sets node links to NULL
-	node->next=NULL;
-	node->prev=NULL;
+void removeNode(TCB *node) {
+    if(node == head && node == tail) {
+        head = NULL;
+        tail = NULL;
+    } else if (node == head) {
+        node->next->prev = tail;        //chop off head
+        head = node->next;            //reassign head
+    } else if (node == tail) {
+        node->prev->next = head;        //chop off tail
+        tail = node->prev;            //reassign tail
+    } else {
+        node->next->prev = node->prev;    //clip next
+        node->prev->next = node->next;    //clip prev
+    }
+    //sets node links to NULL
+    node->next = NULL;
+    node->prev = NULL;
 }
 
 
@@ -392,10 +403,10 @@ void setupSystem() {
 
     powerSubsystem.taskDataPtr = (void *) &powerSubsystemData;
     powerSubsystem.task = &powerSubsystemTask;
-	powerSubsystem.next = NULL;
-	powerSubsystem.prev = NULL;
+    powerSubsystem.next = NULL;
+    powerSubsystem.prev = NULL;
 
-    insert(&powerSubsystem);
+    insertNode(&powerSubsystem);
 
     //Thruster Subsystem
     TCB thrusterSubsystem;
@@ -405,10 +416,10 @@ void setupSystem() {
 
     thrusterSubsystem.taskDataPtr = (void *) &thrusterSubsystemData;
     thrusterSubsystem.task = &thrusterSubsystemTask;
-	thrusterSubsystem.next = NULL;
-	thrusterSubsystem.prev = NULL;
+    thrusterSubsystem.next = NULL;
+    thrusterSubsystem.prev = NULL;
 
-    insert(&thrusterSubsystem);
+    insertNode(&thrusterSubsystem);
 
     //Satellite Comms
     TCB satelliteComs;
@@ -424,10 +435,10 @@ void setupSystem() {
 
     satelliteComs.taskDataPtr = (void *) &satelliteComsData;
     satelliteComs.task = &satelliteComsTask;
-	satelliteComs.next = NULL;
-	satelliteComs.prev = NULL;
+    satelliteComs.next = NULL;
+    satelliteComs.prev = NULL;
 
-    insert(&satelliteComs);
+    insertNode(&satelliteComs);
 
     //Console Display
     TCB consoleDisplay;
@@ -442,10 +453,10 @@ void setupSystem() {
 
     consoleDisplay.taskDataPtr = (void *) &consoleDisplayData;
     consoleDisplay.task = &consoleDisplayTask;
-	consoleDisplay.next = NULL;
-	consoleDisplay.prev = NULL;
+    consoleDisplay.next = NULL;
+    consoleDisplay.prev = NULL;
 
-    insert(&consoleDisplay);
+    insertNode(&consoleDisplay);
 
     //Warning Alarm
     TCB warningAlarm;
@@ -457,10 +468,10 @@ void setupSystem() {
 
     warningAlarm.taskDataPtr = (void *) &warningAlarmData;
     warningAlarm.task = &warningAlarmTask;
-	warningAlarm.next = NULL;
-	warningAlarm.prev = NULL;
+    warningAlarm.next = NULL;
+    warningAlarm.prev = NULL;
 
-    insert(&warningAlarm);
+    insertNode(&warningAlarm);
 
     //Starts the schedule looping
     scheduleTask();
@@ -468,13 +479,12 @@ void setupSystem() {
 
 //Runs the loop of all six tasks, does not run the task if the task pointer is null
 void scheduleTask() {
+    TCB *cur = head;
     while (1) { //Loop forever
-		if (NULL != head){
-			head->task(head->taskDataPtr);
-			TCB *node = head;
-			remove(node);
-			insert(node);
-		}
+        if (NULL != head) {
+            cur->task(head->taskDataPtr);
+            cur = cur->next;
+        }
     }
 }
 
