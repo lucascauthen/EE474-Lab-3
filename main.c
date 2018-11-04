@@ -122,8 +122,17 @@ unsigned short BatteryPin = A15; //Analog Pin A15 on ATMEGA 2560
 unsigned short BatteryPin = 82; //Analog Pin A15 on ATMEGA 2560
 #endif
 unsigned short BatteryLevelArray[16];
+unsigned short BatteryLevelIndex = 0;
 
 unsigned short BatteryDelay = 600;
+
+const unsigned short BATTERY_95 = 34;
+const unsigned short BATTERY_50 = 18;
+const unsigned short BATTERY_10 = 3;
+
+const unsigned short FUEL_95 = 95;
+const unsigned short FUEL_50 = 50;
+const unsigned short FUEL_10 = 10;
 
 //Solar Panel Control
 Bool SolarPanelState = FALSE;
@@ -131,7 +140,7 @@ Bool SolarPanelDeploy = FALSE;
 Bool SolarPanelRetract = FALSE;
 Bool DriveMotorSpeedInc = FALSE;
 Bool DriveMotorSpeedDec = FALSE;
-unsigned short DriveMotorSpeed = 0;
+unsigned short DriveMotorSpeed = PWM_DEFAULT;
 
 //Status Management and Annunciation
 //Same as Power Management
@@ -308,6 +317,7 @@ unsigned short unsignedShortMin(long a, long b) {
 //Arduino setup function
 void setup(void) {
     Serial.begin(9600); //Sets baud rate to 9600
+    Serial1.begin(9600);
 
     pinMode(PWM_OUTPUT_PIN, OUTPUT); //SETUP PWM OUTPUT SIGNAL
 
@@ -440,6 +450,7 @@ void setupSystem() {
     powerSubsystemData.powerGeneration = &PowerGeneration;
     powerSubsystemData.solarPanelDeploy = &SolarPanelDeploy;
     powerSubsystemData.solarPanelRetract = &SolarPanelRetract;
+    powerSubsystemData.batteryLevelArrayIndex = &BatteryLevelIndex;
 
     powerSubsystemTCB.taskDataPtr = (void *) &powerSubsystemData;
     powerSubsystemTCB.task = &powerSubsystemTask;
@@ -519,6 +530,16 @@ void setupSystem() {
     consoleKeypadTCB.next = NULL;
     consoleKeypadTCB.prev = NULL;
 
+    //Vehicle Taks
+    VehicleCommsData vehicleCommsData;
+    vehicleCommsData.command = &Command;
+    vehicleCommsData.responce = &Response;
+    vehicalComsTCB.taskDataPtr = (void *) &vehicleCommsData;
+    vehicalComsTCB.task = &vehicleCommsTask;
+    vehicalComsTCB.next = NULL;
+    vehicalComsTCB.prev = NULL;
+    insertNode(&vehicalComsTCB);
+
 
     //Starts the schedule looping
     scheduleTask();
@@ -537,9 +558,17 @@ void scheduleTask() {
                 cur = cur->next; //This happens with the natural progression of the queue
             }
 #if ARDUINO_ON
-            while (Serial.available()) {
+            while (Serial.available() > 0) {
                 char input = Serial.read();
                 processesEarthInput(input);
+            }
+            bool didPrint = false;
+            while(Serial1.available() > 0) {
+                didPrint = true;
+                Serial.print(Serial1.read());
+            }
+            if(didPrint) {
+                Serial.println();
             }
 #endif
         }
@@ -612,14 +641,14 @@ void powerSubsystemTask(void *powerSubsystemData) {
 
         //powerGeneration
         if (*data->solarPanelState) {
-            if (*data->batteryLevel > 34) {
+            if (*data->batteryLevel > BATTERY_95) {
                 if (*data->solarPanelRetract) {  //If we have not already signalled to retract
                     insertNode(&solarPanelControlTCB); //Start the task
                 }
                 *data->solarPanelDeploy = FALSE;
                 *data->solarPanelRetract = TRUE;
                 *data->powerGeneration = 0;
-            } else if (*data->batteryLevel < 18) {
+            } else if (*data->batteryLevel < BATTERY_50) {
                 //Increment the variable by 2 every even numbered time
                 if (executionCount % 2 == 0) {
                     (*data->powerGeneration) += 2;
@@ -633,7 +662,7 @@ void powerSubsystemTask(void *powerSubsystemData) {
                 }
             }
         } else {
-            if (*data->batteryLevel <= 4) {
+            if (*data->batteryLevel <= BATTERY_10) {
                 if (!*data->solarPanelDeploy) { //If we have not already signalled to deploy
                     insertNode(&solarPanelControlTCB); //Add the task
                 }
@@ -683,7 +712,7 @@ void powerSubsystemTask(void *powerSubsystemData) {
 
 void batteryRead(PowerSubsystemData *data) {
 #if ARDUINO_ON
-    unsigned short newVal = ((analogRead(BatteryPin) - 50)*0.12766 - (*(data->powerConsumption)) + (*(data->powerGeneration)));
+    unsigned short newVal = ((analogRead(BatteryPin) - 50)*0.12766); //- (*(data->powerConsumption)) + (*(data->powerGeneration))
 #else
     unsigned short newVal = 0;
 #endif
@@ -692,8 +721,9 @@ void batteryRead(PowerSubsystemData *data) {
     } else if (newVal > 36) {
         newVal = 36;
     }
-    BatteryLevelArray[data->batteryLevelArrayIndex] = newVal;
-    data->batteryLevelArrayIndex = (data->batteryLevelArrayIndex + 1) % 16;
+    //BatteryLevelArray[*data->batteryLevelArrayIndex] = newVal;
+    //*data->batteryLevelArrayIndex = (unsigned short) ((*data->batteryLevelArrayIndex + 1) % 16);
+    *data->batteryLevel = newVal;
 #if ARDUINO_ON && DEBUG
     Serial.print("Battery Level: ");
     Serial.print(newVal);
@@ -861,13 +891,13 @@ void warningAlarmTask(void *warningAlarmData) {
     static unsigned long hideBatteryTime = 0;
     static unsigned long showBatteryTime = 0;
 
-    *data->fuelLow = *data->fuelLevel <= 10 ? TRUE : FALSE;
-    *data->batteryLow = *data->batteryLow <= 10 ? TRUE : FALSE;
+    *data->fuelLow = *data->fuelLevel <= FUEL_10 ? TRUE : FALSE;
+    *data->batteryLow = *data->batteryLow <= BATTERY_10 ? TRUE : FALSE;
 
-    unsigned long fuelDelay = (*data->fuelLevel <= 10) ? LongTimeDelay : ShortTimeDelay;
-    int fuelColor = (*data->fuelLevel <= 10) ? RED : ORANGE;
+    unsigned long fuelDelay = (*data->fuelLevel <= FUEL_10) ? LongTimeDelay : ShortTimeDelay;
+    int fuelColor = (*data->fuelLevel <= FUEL_10) ? RED : ORANGE;
 
-    if (*data->fuelLevel <= 50) {
+    if (*data->fuelLevel <= FUEL_50) {
         if (fuelStatus == fuelColor) {
             if (showFuelTime == 0) { //If showing fuel status
                 if (hideFuelTime < systemTime()) {
@@ -892,9 +922,9 @@ void warningAlarmTask(void *warningAlarmData) {
         fuelStatus = GREEN;
     }
 
-    unsigned long batteryDelay = (*data->batteryLevel <= 10) ? ShortTimeDelay : LongTimeDelay;
-    int batteryColor = (*data->batteryLevel <= 10) ? RED : ORANGE;
-    if (*data->batteryLevel <= 50) {
+    unsigned long batteryDelay = (*data->batteryLevel <= BATTERY_10) ? ShortTimeDelay : LongTimeDelay;
+    int batteryColor = (*data->batteryLevel <= BATTERY_10) ? RED : ORANGE;
+    if (*data->batteryLevel <= BATTERY_50) {
         if (batteryStatus == batteryColor) {
             if (showBatteryTime == 0) { //If showing battery status
                 if (hideBatteryTime < systemTime()) {
@@ -922,12 +952,13 @@ void warningAlarmTask(void *warningAlarmData) {
 
 //Controls the execution of the solar panel control subsystem
 void solarPanelControlTask(void *solarPanelControlData) {
+#if 1
     SolarPanelControlData *data = (SolarPanelControlData *) solarPanelControlData;
     static Bool runningTask = FALSE;
     static Bool isDeploy = FALSE;
     static Bool isPWMOn = TRUE;
     static unsigned long nextPWMTime = 0;
-    static unsigned long lastRunTime = 0;
+    static unsigned long lastOnTime = 0;
     static unsigned long elapsedTime = 0;
 
     volatile Bool pwmOutput = FALSE; //Output this to arduino
@@ -946,25 +977,24 @@ void solarPanelControlTask(void *solarPanelControlData) {
 #endif
         insertNode(&consoleKeypadTCB);
         runningTask = TRUE;
-        lastRunTime = systemTime();
+        lastOnTime = systemTime();
         isDeploy = *data->solarPanelDeploy;
-        nextPWMTime = systemTime() +
-                      (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
+        nextPWMTime = systemTime() + (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
         elapsedTime = 0;
+#if ARDUINO_ON
+        digitalWrite(PWM_OUTPUT_PIN, LOW); //Reset pwm signal
+#endif
     } else {
-        elapsedTime += systemTime() - lastRunTime * (unsigned long) (((float) PWMPeriod *
-                                                                      ((float) *data->driveMotorSpeed /
-                                                                       (float) PWM_100)));
-
-        lastRunTime = systemTime();
         if (systemTime() >= nextPWMTime) {
+            //printf("elapsedTime: %d\n", (int) elapsedTime);
             if (isPWMOn) { //If we are on, we need to go off
                 nextPWMTime = systemTime() + (unsigned long) (((float) PWMPeriod *
                                                                ((float) (PWM_100 - *data->driveMotorSpeed) /
                                                                 (float) PWM_100)));
+                elapsedTime += systemTime() - lastOnTime;
             } else { //If we are off we need to go on
-                nextPWMTime = systemTime() +
-                              (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
+                nextPWMTime = systemTime() + (unsigned long) (((float) PWMPeriod * ((float) *data->driveMotorSpeed / (float) PWM_100)));
+                lastOnTime = systemTime();
             }
 
             isPWMOn = !isPWMOn;
@@ -991,6 +1021,7 @@ void solarPanelControlTask(void *solarPanelControlData) {
     }
 #if ARDUINO_ON
 
+#endif
 #endif
 }
 
@@ -1019,7 +1050,14 @@ void consoleKeypadTask(void *consoleKeypadData) {
 //Controls the execution of the VehicleComms task
 void vehicleCommsTask(void *vehicleCommsData) {
     VehicleCommsData *data = (VehicleCommsData *) vehicleCommsData;
+    static char lastProcessedInput = NO_VEHICLE_COMMAND;
+#if ARDUINO_ON
+    if (lastProcessedInput != LAST_VEHICLE_COMM) {
+        Serial1.print(LAST_VEHICLE_COMM);
 
+        lastProcessedInput = LAST_VEHICLE_COMM;
+    }
+#endif
 
 }
 
